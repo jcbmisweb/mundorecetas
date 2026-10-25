@@ -298,8 +298,26 @@ function App() {
         executeDatabaseSeparation(rawMergedRecipes, rawMergedProducts);
       }
 
-      setRecipes(cleanRecipes);
-      try { localStorage.setItem('cached_recipes', JSON.stringify(cleanRecipes)); } catch {}
+      let finalRecipes = cleanRecipes;
+      if (finalRecipes.length < 5) {
+        try {
+          const resp = await fetch('/assets/aistudio/recipes_rows_d32d099c.csv');
+          if (resp.ok) {
+            const text = await resp.text();
+            const parsed = parseRecipesFromCSV(text, 'user_admin', 'JUAN CODINA BARRANCO').map(ensureRecipeType);
+            if (parsed.length > 0) {
+              finalRecipes = parsed;
+              await localDB.recipes.clear();
+              await localDB.recipes.bulkPut(parsed);
+            }
+          }
+        } catch (e) {
+          console.warn('Refresh CSV fallback warning:', e);
+        }
+      }
+
+      setRecipes(finalRecipes);
+      try { localStorage.setItem('cached_recipes', JSON.stringify(finalRecipes)); } catch {}
 
       setProductDatabase(extractedProducts);
       try { localStorage.setItem('cached_products', JSON.stringify(extractedProducts)); } catch {}
@@ -347,18 +365,19 @@ function App() {
     const loadDexieData = async () => {
       try {
         let localRecipes = await localDB.recipes.toArray();
-        if (localRecipes.length > 0) {
+        if (localRecipes.length > 5) {
           const normalized = localRecipes.map(ensureRecipeType);
           setRecipes(normalized);
           try { await localDB.recipes.bulkPut(normalized); } catch {}
         } else {
-          // Si localDB está vacío al inicio, auto-cargar desde el CSV bundled
+          // Si localDB tiene menos de 5 recetas (ej. por limpieza previa), auto-cargar desde el CSV bundled
           try {
             const resp = await fetch('/assets/aistudio/recipes_rows_d32d099c.csv');
             if (resp.ok) {
               const text = await resp.text();
               const parsed = parseRecipesFromCSV(text, 'user_admin', 'JUAN CODINA BARRANCO').map(ensureRecipeType);
               if (parsed.length > 0) {
+                await localDB.recipes.clear();
                 await localDB.recipes.bulkPut(parsed);
                 setRecipes(parsed);
                 localRecipes = parsed;

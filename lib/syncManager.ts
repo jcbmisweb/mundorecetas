@@ -21,9 +21,14 @@ let lastSyncTime = Date.now();
 let syncIntervalId: NodeJS.Timeout | null = null;
 let isQuotaExceeded = false;
 
+export const getIsQuotaExceeded = () => isQuotaExceeded;
+export const setIsQuotaExceeded = (val: boolean) => {
+  isQuotaExceeded = val;
+  notifyListeners(val ? '⚡ Cuota diaria de Firestore alcanzada. Modo local activo.' : 'Estado de cuota reiniciado.');
+};
+
 export const resetQuotaStatus = () => {
-  isQuotaExceeded = false;
-  notifyListeners('Estado de cuota reiniciado.');
+  setIsQuotaExceeded(false);
 };
 
 export const subscribeSyncStatus = (listener: SyncStatusListener) => {

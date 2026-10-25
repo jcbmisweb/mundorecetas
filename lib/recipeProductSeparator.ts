@@ -2,6 +2,7 @@ import { Recipe, Product, Allergen } from '../types';
 import { localDB } from '../db/dexieDB';
 import { db } from '../firebase';
 import { collection, doc, writeBatch, deleteDoc, setDoc } from 'firebase/firestore';
+import { getIsQuotaExceeded, setIsQuotaExceeded } from './syncManager';
 
 /**
  * Raw product categories that distinguish ingredients from culinary recipes.
@@ -16,44 +17,55 @@ export const RAW_PRODUCT_CATEGORIES = new Set([
 /**
  * Checks whether a Recipe object is actually a misclassified raw Product / Ingredient.
  */
+/**
+ * Checks whether a Recipe object is actually a misclassified raw Product / Ingredient.
+ */
 export const isRecipeRawProduct = (recipe: Recipe): boolean => {
   if (!recipe || !recipe.name) return false;
 
   const id = (recipe.id || '').toLowerCase();
   
-  // 1. Check ID pattern typical of products
-  if (id.startsWith('p_') || id.startsWith('prod_') || id.startsWith('p_csv_')) {
+  // 1. Explicit product ID prefixes
+  if (id.startsWith('prod_') || id.startsWith('p_csv_') || id.startsWith('p_prod_')) {
     return true;
   }
 
-  // 2. Check explicit product fields attached to recipe object
-  if ((recipe as any).pricePerUnit !== undefined || (recipe as any).weightPerUnit !== undefined) {
+  // 2. Check recipe indicators: if ANY exist, this is a genuine recipe, NOT a raw product.
+  const subRecipes = Array.isArray(recipe.subRecipes) ? recipe.subRecipes : [];
+  const hasSubRecipes = subRecipes.length > 0 && subRecipes.some(s => 
+    (Array.isArray(s.ingredients) && s.ingredients.length > 0) || 
+    (typeof s.instructions === 'string' && s.instructions.trim().length > 0)
+  );
+  const hasPlating = typeof recipe.platingInstructions === 'string' && recipe.platingInstructions.trim().length > 0;
+  const hasYield = recipe.yieldQuantity !== undefined && recipe.yieldQuantity !== null && Number(recipe.yieldQuantity) > 0;
+  const hasMinimalistCard = !!recipe.minimalistCard && (
+    (Array.isArray(recipe.minimalistCard.allergens) && recipe.minimalistCard.allergens.length > 0) ||
+    (typeof recipe.minimalistCard.miniComment === 'string' && recipe.minimalistCard.miniComment.trim().length > 0) ||
+    (typeof recipe.minimalistCard.summaryInstructions === 'string' && recipe.minimalistCard.summaryInstructions.trim().length > 0) ||
+    (typeof recipe.minimalistCard.platingTips === 'string' && recipe.minimalistCard.platingTips.trim().length > 0)
+  );
+
+  // If it has ANY recipe indicator, it is definitely a recipe!
+  if (hasSubRecipes || hasPlating || hasYield || hasMinimalistCard) {
+    return false;
+  }
+
+  // 3. If it has explicit product pricing/weight fields and zero recipe indicators, it's a raw product
+  const hasPricePerUnit = (recipe as any).pricePerUnit !== undefined && typeof (recipe as any).pricePerUnit === 'number';
+  const hasWeightPerUnit = (recipe as any).weightPerUnit !== undefined && typeof (recipe as any).weightPerUnit === 'number';
+  if (hasPricePerUnit || hasWeightPerUnit) {
     return true;
   }
 
-  // 3. Check if category is a raw product category AND it lacks culinary sub-recipes/instructions
+  // 4. If category is strictly a raw non-culinary store category and has zero recipe indicators
   const mainCat = (recipe.category || (recipe.categories && recipe.categories[0]) || '').toUpperCase().trim();
-  const isProdCategory = RAW_PRODUCT_CATEGORIES.has(mainCat);
-
-  const subRecipes = recipe.subRecipes || [];
-  const hasRealSubRecipes = subRecipes.some(sub => {
-    const hasIngredients = Array.isArray(sub.ingredients) && sub.ingredients.length > 0;
-    const hasInstructions = typeof sub.instructions === 'string' && sub.instructions.trim().length > 15;
-    return hasIngredients || hasInstructions;
-  });
-
-  const hasPlating = typeof recipe.platingInstructions === 'string' && recipe.platingInstructions.trim().length > 15;
-
-  if (isProdCategory && !hasRealSubRecipes && !hasPlating) {
+  const STRICT_RAW_CATEGORIES = new Set([
+    'ALMACÉN', 'ALMACEN', 'ESPECIAS', 'GRASAS', 'ACEITES', 
+    'CONGELADOS', 'LIMPIEZA', 'SOSA', 'BEBIDAS', 'PANADERÍA (MATERIA PRIMA)'
+  ]);
+  
+  if (STRICT_RAW_CATEGORIES.has(mainCat)) {
     return true;
-  }
-
-  // 4. Fallback: single word item with 0 ingredients and 0 instructions in raw category
-  if (!hasRealSubRecipes && !hasPlating) {
-    const isSingleWordUpper = recipe.name.trim() === recipe.name.trim().toUpperCase() && recipe.name.trim().split(/\s+/).length <= 3;
-    if (isProdCategory || isSingleWordUpper) {
-      return true;
-    }
   }
 
   return false;
@@ -176,26 +188,37 @@ export const executeDatabaseSeparation = async (
     console.warn('Could not update Dexie localDB during separation:', e);
   }
 
-  // 3. Update Firestore if accessible
-  try {
-    const misclassifiedRecipes = currentRecipes.filter(isRecipeRawProduct);
-    for (const r of misclassifiedRecipes) {
-      // Delete misclassified document from /recipes
-      try {
-        await deleteDoc(doc(db, 'recipes', r.id));
-      } catch (err) {
-        // Ignore permission or quota errors
+  // 3. Update Firestore if accessible and quota is available
+  if (!getIsQuotaExceeded()) {
+    try {
+      const misclassifiedRecipes = currentRecipes.filter(isRecipeRawProduct);
+      for (const r of misclassifiedRecipes) {
+        if (getIsQuotaExceeded()) break;
+        // Delete misclassified document from /recipes
+        try {
+          await deleteDoc(doc(db, 'recipes', r.id));
+        } catch (err: any) {
+          const msg = err?.message || String(err);
+          if (msg.includes('Quota') || msg.includes('quota') || err?.code === 'resource-exhausted') {
+            setIsQuotaExceeded(true);
+            break;
+          }
+        }
+        // Save converted product to /products
+        try {
+          const prod = convertRecipeToProduct(r);
+          await setDoc(doc(db, 'products', prod.id), prod, { merge: true });
+        } catch (err: any) {
+          const msg = err?.message || String(err);
+          if (msg.includes('Quota') || msg.includes('quota') || err?.code === 'resource-exhausted') {
+            setIsQuotaExceeded(true);
+            break;
+          }
+        }
       }
-      // Save converted product to /products
-      try {
-        const prod = convertRecipeToProduct(r);
-        await setDoc(doc(db, 'products', prod.id), prod, { merge: true });
-      } catch (err) {
-        // Ignore quota errors
-      }
+    } catch (e) {
+      console.warn('Firestore cloud cleanup warning:', e);
     }
-  } catch (e) {
-    console.warn('Firestore cloud cleanup warning:', e);
   }
 
   return {
