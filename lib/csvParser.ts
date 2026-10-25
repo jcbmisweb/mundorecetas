@@ -89,6 +89,15 @@ export function parseRecipesFromCSV(
 
   const headers = rows[0].map(h => h.trim().toLowerCase());
   
+  // Defensive check: If headers indicate a Product CSV, do not parse as recipes!
+  const isProductCSV = headers.includes('price_per_unit') || 
+                       headers.includes('weight_per_unit') || 
+                       (headers.includes('unit') && !headers.includes('sub_recipes') && !headers.includes('yield_quantity'));
+  if (isProductCSV) {
+    console.warn("parseRecipesFromCSV received a product CSV file. Skipping recipe creation.");
+    return [];
+  }
+  
   // Detect column indices based on header names or fall back to known standard layout
   const colIdx = {
     id: headers.indexOf('id'),
@@ -111,30 +120,41 @@ export function parseRecipesFromCSV(
     last_modified: headers.indexOf('last_modified')
   };
 
-  // Fallbacks if headers weren't named exactly as expected
-  if (colIdx.name === -1) colIdx.name = 3;
-  if (colIdx.id === -1) colIdx.id = 0;
-  if (colIdx.category === -1) colIdx.category = 4;
-  if (colIdx.categories === -1) colIdx.categories = 5;
-  if (colIdx.photo === -1) colIdx.photo = 6;
-  if (colIdx.creator === -1) colIdx.creator = 8;
-  if (colIdx.is_public === -1) colIdx.is_public = 10;
-  if (colIdx.yield_quantity === -1) colIdx.yield_quantity = 15;
-  if (colIdx.yield_unit === -1) colIdx.yield_unit = 16;
-  if (colIdx.sub_recipes === -1) colIdx.sub_recipes = 17;
-  if (colIdx.plating_instructions === -1) colIdx.plating_instructions = 18;
-  if (colIdx.service_details === -1) colIdx.service_details = 19;
-  if (colIdx.extra_allergens === -1) colIdx.extra_allergens = 20;
-  if (colIdx.minimalist_card === -1) colIdx.minimalist_card = 21;
-  if (colIdx.take_away_details === -1) colIdx.take_away_details = 22;
-  if (colIdx.total_cost === -1) colIdx.total_cost = 23;
-  if (colIdx.last_modified === -1) colIdx.last_modified = 24;
+  // Fallbacks ONLY if headers look like a recipe file
+  if (headers.includes('sub_recipes') || headers.includes('yield_quantity')) {
+    if (colIdx.name === -1) colIdx.name = 3;
+    if (colIdx.id === -1) colIdx.id = 0;
+    if (colIdx.category === -1) colIdx.category = 4;
+    if (colIdx.categories === -1) colIdx.categories = 5;
+    if (colIdx.photo === -1) colIdx.photo = 6;
+    if (colIdx.creator === -1) colIdx.creator = 8;
+    if (colIdx.is_public === -1) colIdx.is_public = 10;
+    if (colIdx.yield_quantity === -1) colIdx.yield_quantity = 15;
+    if (colIdx.yield_unit === -1) colIdx.yield_unit = 16;
+    if (colIdx.sub_recipes === -1) colIdx.sub_recipes = 17;
+    if (colIdx.plating_instructions === -1) colIdx.plating_instructions = 18;
+    if (colIdx.service_details === -1) colIdx.service_details = 19;
+    if (colIdx.extra_allergens === -1) colIdx.extra_allergens = 20;
+    if (colIdx.minimalist_card === -1) colIdx.minimalist_card = 21;
+    if (colIdx.take_away_details === -1) colIdx.take_away_details = 22;
+    if (colIdx.total_cost === -1) colIdx.total_cost = 23;
+    if (colIdx.last_modified === -1) colIdx.last_modified = 24;
+  } else if (colIdx.name === -1 || colIdx.id === -1) {
+    // Cannot determine valid recipe columns
+    return [];
+  }
 
   const recipes: Recipe[] = [];
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (row.length < 2) continue;
+
+    const rowId = row[colIdx.id]?.trim() || '';
+    if (rowId.startsWith('p_') || rowId.startsWith('prod_')) {
+      // Skip product IDs from being imported as recipes
+      continue;
+    }
 
     const rawName = row[colIdx.name]?.trim();
     if (!rawName) continue;

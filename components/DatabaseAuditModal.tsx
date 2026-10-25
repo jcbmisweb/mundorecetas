@@ -12,6 +12,7 @@ import {
   removeEmergencyDraft, 
   ensureRecipeFitsFirestore 
 } from '../lib/imageUtils';
+import { executeDatabaseSeparation, isRecipeRawProduct } from '../lib/recipeProductSeparator';
 
 interface DatabaseAuditModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ interface DatabaseAuditModalProps {
   appUser: AppUser | null;
   onRestoreRecipes: (restored: Recipe[]) => Promise<void>;
   onResetFilters?: () => void;
+  onRefreshData?: () => Promise<void> | void;
 }
 
 export const DatabaseAuditModal: React.FC<DatabaseAuditModalProps> = ({
@@ -34,11 +36,14 @@ export const DatabaseAuditModal: React.FC<DatabaseAuditModalProps> = ({
   menus,
   appUser,
   onRestoreRecipes,
-  onResetFilters
+  onResetFilters,
+  onRefreshData
 }) => {
   const [activeTab, setActiveTab] = useState<'audit' | 'recovery' | 'backup'>('audit');
   const [isScanning, setIsScanning] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isSeparating, setIsSeparating] = useState(false);
+  const [separationSuccessMessage, setSeparationSuccessMessage] = useState<string | null>(null);
   const [restoreSuccessCount, setRestoreSuccessCount] = useState<number | null>(null);
 
   // Local storage scanned items
@@ -404,6 +409,75 @@ export const DatabaseAuditModal: React.FC<DatabaseAuditModalProps> = ({
                   </p>
                 </div>
               </div>
+
+              {/* Herramienta Especializada de Separación (Recetas vs Productos) */}
+              {(() => {
+                const misclassified = recipes.filter(isRecipeRawProduct);
+                return (
+                  <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-5 space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Sparkles size={18} className="text-amber-600" />
+                          <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                            Separación Inteligente de Recetas e Ingredientes
+                          </h4>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                            misclassified.length > 0 ? 'bg-amber-500 text-white animate-pulse' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {misclassified.length > 0 ? `${misclassified.length} en conflicto` : 'Todo Correcto'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Si al importar archivos CSV o JSON se confundieron los ingredientes del catálogo con recetas gastronómicas, esta función detecta los productos materias primas (como Harina, Leche, Aceites) y los traslada al <strong>Catálogo de Ingredientes Maestro</strong> ({products.length} productos), dejando únicamente las verdaderas fichas técnicas de cocina.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={isSeparating || misclassified.length === 0}
+                        onClick={async () => {
+                          setIsSeparating(true);
+                          setSeparationSuccessMessage(null);
+                          try {
+                            const res = await executeDatabaseSeparation(recipes, products);
+                            if (onRefreshData) await onRefreshData();
+                            setSeparationSuccessMessage(`¡Éxito! Se han extraído ${res.movedCount} productos del listado de recetas y se han movido correctamente al catálogo de ingredientes.`);
+                          } catch (err: any) {
+                            alert(`Error al ejecutar separación: ${err.message || err}`);
+                          } finally {
+                            setIsSeparating(false);
+                          }
+                        }}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase transition-all shadow-md shrink-0 flex items-center gap-2 ${
+                          misclassified.length > 0 
+                            ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/20' 
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {isSeparating ? (
+                          <>
+                            <RefreshCw size={14} className="animate-spin" />
+                            <span>Separando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Layers size={14} />
+                            <span>⚡ Separar {misclassified.length > 0 ? `${misclassified.length} Productos` : ''}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {separationSuccessMessage && (
+                      <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-900 text-xs font-bold flex items-center gap-2">
+                        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                        <span>{separationSuccessMessage}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

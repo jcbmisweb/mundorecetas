@@ -62,6 +62,7 @@ import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal, seedLoca
 import { subscribeSyncStatus, executeCloudSync, startAutoSync, checkBatchSyncThreshold } from './lib/syncManager';
 import { initGoogleDriveAuth } from './lib/googleDriveService';
 import { parseRecipesFromCSV, parseProductsFromCSV } from './lib/csvParser';
+import { separateRecipesAndProducts, executeDatabaseSeparation, isRecipeRawProduct } from './lib/recipeProductSeparator';
 
 type ViewState = 
   | 'LANDING' 
@@ -274,13 +275,8 @@ function App() {
         }
       });
 
-      const mergedRecipes = Array.from(recipeMap.values()).map(ensureRecipeType);
-      if (mergedRecipes.length > 0) {
-        setRecipes(mergedRecipes);
-        try { localStorage.setItem('cached_recipes', JSON.stringify(mergedRecipes)); } catch {}
-        try { await localDB.recipes.bulkPut(mergedRecipes); } catch {}
-      }
-
+      const rawMergedRecipes = Array.from(recipeMap.values()).map(ensureRecipeType);
+      
       // 2. Products (Local + Cloud merge)
       const localProducts = await localDB.products.toArray();
       let pLoaded: Product[] = [];
@@ -293,11 +289,20 @@ function App() {
       const productMap = new Map<string, Product>();
       pLoaded.forEach(p => { if (p.id) productMap.set(p.id, p); });
       localProducts.forEach(p => { if (p.id) productMap.set(p.id, p); });
-      const mergedProducts = Array.from(productMap.values());
-      if (mergedProducts.length > 0) {
-        setProductDatabase(mergedProducts);
-        try { localStorage.setItem('cached_products', JSON.stringify(mergedProducts)); } catch {}
+      const rawMergedProducts = Array.from(productMap.values());
+
+      // 2b. Separar automáticamente cualquier ingrediente/producto que haya entrado erróneamente en recetas
+      const { cleanRecipes, extractedProducts, movedCount } = separateRecipesAndProducts(rawMergedRecipes, rawMergedProducts);
+      if (movedCount > 0) {
+        console.info(`[Auto-Separación] Se han extraído ${movedCount} ingredientes de la lista de recetas y movido al catálogo.`);
+        executeDatabaseSeparation(rawMergedRecipes, rawMergedProducts);
       }
+
+      setRecipes(cleanRecipes);
+      try { localStorage.setItem('cached_recipes', JSON.stringify(cleanRecipes)); } catch {}
+
+      setProductDatabase(extractedProducts);
+      try { localStorage.setItem('cached_products', JSON.stringify(extractedProducts)); } catch {}
 
       // 3. Menus
       let mLoaded: MenuPlan[] = [];
@@ -326,7 +331,7 @@ function App() {
       }
 
       // Seed Dexie DB
-      seedLocalDatabase(mergedRecipes.length > 0 ? mergedRecipes : rLoaded.map(ensureRecipeType), mergedProducts.length > 0 ? mergedProducts : pLoaded, mLoaded);
+      seedLocalDatabase(cleanRecipes, extractedProducts, mLoaded);
     } catch (e) {
       console.warn("Error refreshing all data:", e);
     }
@@ -385,6 +390,15 @@ function App() {
 
         const localMenus = await localDB.menuPlans.toArray();
         if (localMenus.length > 0) setSavedMenus(localMenus);
+
+        // Verificación de auto-separación tras carga inicial
+        const currentRecs = localRecipes.length > 0 ? localRecipes.map(ensureRecipeType) : [];
+        const currentProds = localProducts.length > 0 ? localProducts : [];
+        if (currentRecs.some(isRecipeRawProduct)) {
+          const sep = await executeDatabaseSeparation(currentRecs, currentProds);
+          setRecipes(sep.cleanRecipes);
+          setProductDatabase(sep.cleanProducts);
+        }
       } catch (e) {
         console.warn('Dexie DB load error:', e);
       }
