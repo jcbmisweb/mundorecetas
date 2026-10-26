@@ -686,18 +686,26 @@ function App() {
   const handleCreateNew = () => { setCurrentRecipe(null); setViewState('EDITOR'); };
 
   const migrateRecipeIfNeeded = (r: Recipe): Recipe => {
+    if (!r) return r;
     const legacy = r as any;
-    const updatedSubRecipes = (legacy.subRecipes || []).map((sr: any) => {
-      if (sr.photo !== undefined && sr.photos === undefined) {
-        return { ...sr, photos: sr.photo ? [sr.photo] : [], photo: undefined };
-      }
-      return sr;
+    const updatedSubRecipes = (legacy.subRecipes || []).map((sr: any, idx: number) => {
+      let photos = sr.photos;
+      if (!photos && sr.photo) photos = [sr.photo];
+      if (!photos) photos = [];
+      return {
+        id: sr.id || `sub-${idx + 1}`,
+        name: sr.name || `Elaboración ${idx + 1}`,
+        ingredients: Array.isArray(sr.ingredients) ? sr.ingredients : [],
+        instructions: sr.instructions || '',
+        photos
+      };
     });
-
-    if (legacy.subRecipes && legacy.subRecipes.length > 0 && updatedSubRecipes === legacy.subRecipes) return r;
 
     return {
       ...r,
+      name: r.name || 'Sin título',
+      yieldQuantity: r.yieldQuantity || 4,
+      yieldUnit: r.yieldUnit || 'pax',
       creator: legacy.creator || appUser?.teacherName || appUser?.displayName || settings.instituteName,
       subRecipes: updatedSubRecipes.length > 0 ? updatedSubRecipes : [{
         id: 'legacy-1',
@@ -706,6 +714,14 @@ function App() {
         instructions: legacy.instructions || '',
         photos: legacy.photo ? [legacy.photo] : []
       }],
+      serviceDetails: r.serviceDetails || {
+        presentation: '',
+        servingTemp: '',
+        cutlery: '',
+        passTime: '',
+        serviceType: '',
+        clientDescription: ''
+      },
       platingInstructions: legacy.platingInstructions || ''
     };
   };
@@ -730,15 +746,6 @@ function App() {
   const handleView = (recipe: Recipe) => {
     setCurrentRecipe(migrateRecipeIfNeeded(recipe));
     setViewState('VIEWER');
-    
-    // Update lastModified on view if it's our recipe
-    if (appUser && recipe.workspaceId === appUser.workspaceId) {
-      try {
-        updateDoc(doc(db, 'recipes', recipe.id), { lastModified: Date.now() });
-      } catch (e) {
-        console.warn('Could not update lastModified:', e);
-      }
-    }
   };
 
   const handleSave = async (recipe: Recipe, redirect = true) => {
@@ -1711,17 +1718,19 @@ function App() {
           {/* Área Principal de Trabajo */}
           <div className="flex-1 min-w-0 flex flex-col">
             {viewState === 'VIEWER' && currentRecipe ? (
-              <RecipeView 
-                recipe={currentRecipe} 
-                onBack={() => setViewState('DASHBOARD')} 
-                settings={settings} 
-                onEdit={handleEdit} 
-                appUser={appUser} 
-                onUpgradeToPro={handleImportFromAcademic}
-                onDuplicate={handleDuplicateRecipe}
-                allRecipes={recipes}
-                onSelectRecipe={(r) => { setCurrentRecipe(r); setViewState('VIEWER'); }}
-              />
+              <ErrorBoundary fallbackTitle="Error al cargar la ficha técnica" onReset={() => setViewState('DASHBOARD')}>
+                <RecipeView 
+                  recipe={currentRecipe} 
+                  onBack={() => setViewState('DASHBOARD')} 
+                  settings={settings} 
+                  onEdit={handleEdit} 
+                  appUser={appUser} 
+                  onUpgradeToPro={handleImportFromAcademic}
+                  onDuplicate={handleDuplicateRecipe}
+                  allRecipes={recipes}
+                  onSelectRecipe={(r) => { setCurrentRecipe(r); setViewState('VIEWER'); }}
+                />
+              </ErrorBoundary>
             ) : viewState === 'EDITOR' ? (
               <RecipeEditor 
                 initialRecipe={currentRecipe} 
