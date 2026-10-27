@@ -19,7 +19,7 @@ import {
   Book, Utensils, Thermometer, Info, Database, MessageSquare, ChevronDown, CheckCircle2,
   ChefHat, Users, Camera, DatabaseZap, Check, HelpCircle, AlertOctagon, Sparkles,
   ShoppingBag, Box, Clock, Scissors, Flame, ArrowRight, AlertCircle, RefreshCw,
-  Ban, Percent, Truck
+  Ban, Percent, Truck, Search, Filter
 } from 'lucide-react';
 
 interface RecipeEditorProps {
@@ -116,6 +116,34 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   const [ingredientActionTarget, setIngredientActionTarget] = useState<{ subIdx: number; ingIdx: number } | null>(null);
   const [familySearch, setFamilySearch] = useState('');
   const [showFamilyList, setShowFamilyList] = useState(false);
+  const [linkedRecipeSearch, setLinkedRecipeSearch] = useState('');
+
+  const filteredAndSortedRecipesForLinking = useMemo(() => {
+    if (!allRecipes) return [];
+
+    // Excluir la propia receta activa y las que ya están enlazadas
+    const available = allRecipes.filter(
+      r => r.id !== initialRecipe?.id && !linkedRecipeIds.includes(r.id)
+    );
+
+    // Ordenar estricta y alfabéticamente A-Z
+    const sorted = [...available].sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })
+    );
+
+    const query = linkedRecipeSearch.trim().toLowerCase();
+    if (!query) return sorted;
+
+    return sorted.filter(r => {
+      const nameMatch = (r.name || '').toLowerCase().includes(query);
+      const catMatch = (r.category || '').toLowerCase().includes(query) ||
+                       (r.categories || []).some(c => c.toLowerCase().includes(query));
+      const ingredientMatch = (r.subRecipes || []).some(sr =>
+        (sr.ingredients || []).some(ing => (ing.name || '').toLowerCase().includes(query))
+      );
+      return nameMatch || catMatch || ingredientMatch;
+    });
+  }, [allRecipes, initialRecipe?.id, linkedRecipeIds, linkedRecipeSearch]);
 
   const existingFamilies = useMemo(() => {
     const families = Array.from(new Set(
@@ -996,19 +1024,22 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         </div>
 
         {/* Sección de Fichas Componentes y Enlaces Inteligentes */}
-        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 p-6 space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
                 <Sparkles size={16} className="text-amber-500" /> Fichas Componentes y Enlaces Inteligentes
               </h3>
-              <p className="text-[10px] text-slate-500 font-medium">
+              <p className="text-[10px] text-slate-500 font-medium mt-0.5">
                 Enlaza salsas, guarniciones, cremas o bizcochos asociados a esta preparación para unificar costos, alérgenos y trazabilidad.
               </p>
             </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg shrink-0">
+              {allRecipes ? `${allRecipes.length} en catálogo` : '0 recetas'}
+            </span>
           </div>
 
-          {/* Sugerencias Inteligentes */}
+          {/* Sugerencias Inteligentes (Ordenadas Alfabéticamente) */}
           {allRecipes && allRecipes.length > 0 && (
             <div>
               <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-2">💡 Sugerencias inteligentes para esta receta:</span>
@@ -1016,8 +1047,8 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                 {allRecipes
                   .filter(r => r.id !== initialRecipe?.id && !linkedRecipeIds.includes(r.id))
                   .filter(r => {
-                    const n = r.name.toLowerCase();
-                    const cat = r.category?.toLowerCase() || '';
+                    const n = (r.name || '').toLowerCase();
+                    const cat = (r.category || '').toLowerCase();
                     const recType = recipeType;
 
                     if (recType === 'pastry') {
@@ -1026,16 +1057,17 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                       return n.includes('salsa') || n.includes('guarnicion') || n.includes('caldo') || n.includes('fondo') || n.includes('pure') || cat.includes('salsa') || cat.includes('guarnicion');
                     }
                   })
-                  .slice(0, 5)
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
+                  .slice(0, 6)
                   .map(suggested => (
                     <button
                       key={suggested.id}
                       type="button"
                       onClick={() => setLinkedRecipeIds([...linkedRecipeIds, suggested.id])}
-                      className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs"
+                      className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs group"
                     >
-                      <span>+ Enlazar "{suggested.name}"</span>
-                      <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded-full">{suggested.category || 'General'}</span>
+                      <span className="group-hover:translate-x-0.5 transition-transform">+ Enlazar "{suggested.name}"</span>
+                      <span className="text-[9px] bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded-full">{suggested.category || 'General'}</span>
                     </button>
                   ))}
               </div>
@@ -1043,11 +1075,15 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           )}
 
           {/* Lista de Fichas Ya Enlazadas */}
-          <div className="space-y-2 pt-2">
-            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Fichas Componentes Enlazadas ({linkedRecipeIds.length}):</span>
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block">
+                Fichas Componentes Enlazadas ({linkedRecipeIds.length}):
+              </span>
+            </div>
             {linkedRecipeIds.length === 0 ? (
               <div className="bg-slate-50 border border-dashed border-slate-200 p-4 rounded-xl text-center text-slate-400 text-xs italic">
-                Ninguna ficha enlazada todavía. Usa las sugerencias arriba o selecciona abajo del catálogo completo.
+                Ninguna ficha enlazada todavía. Usa el canal de filtrado de abajo o las sugerencias para enlazar componentes.
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1055,24 +1091,24 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                   const linkedRecipe = allRecipes?.find(r => r.id === id);
                   if (!linkedRecipe) return null;
                   return (
-                    <div key={id} className="flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-xl">
-                      <div className="flex items-center gap-3">
+                    <div key={id} className="flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-xl shadow-2xs hover:border-slate-300 transition-all">
+                      <div className="flex items-center gap-3 min-w-0">
                         {linkedRecipe.photo ? (
-                          <img src={linkedRecipe.photo} alt="" className="w-10 h-10 object-cover rounded-lg" />
+                          <img src={linkedRecipe.photo} alt="" className="w-10 h-10 object-cover rounded-lg shrink-0 border border-slate-200" />
                         ) : (
-                          <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center text-slate-500 font-black text-xs">
+                          <div className="w-10 h-10 bg-amber-100 text-amber-800 rounded-lg flex items-center justify-center shrink-0 font-black text-xs border border-amber-200">
                             FT
                           </div>
                         )}
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-800">{linkedRecipe.name}</h4>
+                        <div className="truncate">
+                          <h4 className="text-xs font-bold text-slate-800 truncate">{linkedRecipe.name}</h4>
                           <span className="text-[9px] font-black uppercase text-slate-500">{linkedRecipe.category || 'General'} · {linkedRecipe.yieldQuantity} {linkedRecipe.yieldUnit}</span>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setLinkedRecipeIds(linkedRecipeIds.filter(x => x !== id))}
-                        className="text-slate-400 hover:text-rose-600 p-1.5 hover:bg-rose-50 rounded-lg transition-colors"
+                        className="text-slate-400 hover:text-rose-600 p-1.5 hover:bg-rose-50 rounded-lg transition-colors shrink-0 ml-2"
                         title="Quitar enlace"
                       >
                         <Trash2 size={14} />
@@ -1083,26 +1119,103 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
               </div>
             )}
 
-            {/* Selector manual para añadir cualquier otra receta */}
+            {/* Canal de Filtrado y Selección Manual en Orden Alfabético */}
             {allRecipes && allRecipes.length > 0 && (
-              <div className="pt-2">
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase text-amber-700 tracking-wider flex items-center gap-1.5">
+                    <Filter size={13} className="text-amber-500" /> Canal de Filtrado de Recetas
+                  </label>
+                  <span className="text-[9px] font-bold text-slate-400">
+                    {filteredAndSortedRecipesForLinking.length} disponibles (Orden Alfabético A-Z)
+                  </span>
+                </div>
+
+                {/* Input Buscador / Filtro en tiempo real */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={linkedRecipeSearch}
+                    onChange={e => setLinkedRecipeSearch(e.target.value)}
+                    placeholder="Escribe para filtrar por nombre, ingrediente o categoría (ej: GEL, SALSA, CREMA)..."
+                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all shadow-2xs"
+                  />
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-600 pointer-events-none" />
+                  {linkedRecipeSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setLinkedRecipeSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-all"
+                      title="Borrar filtro"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Si hay filtro activo, mostrar resultados rápidos interactivos */}
+                {linkedRecipeSearch.trim() && (
+                  <div className="bg-amber-50/70 border border-amber-200/80 p-3 rounded-2xl space-y-2 animate-fadeIn">
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase text-amber-900">
+                      <span>Coincidencias para "{linkedRecipeSearch}": ({filteredAndSortedRecipesForLinking.length})</span>
+                      {filteredAndSortedRecipesForLinking.length > 0 && (
+                        <span className="text-[9px] text-amber-700 font-normal">Ordenadas Alfabéticamente (A-Z)</span>
+                      )}
+                    </div>
+
+                    {filteredAndSortedRecipesForLinking.length === 0 ? (
+                      <p className="text-xs text-amber-800 font-medium py-2 text-center">
+                        No se encontraron recetas con el término <strong>"{linkedRecipeSearch}"</strong>.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto custom-scrollbar pt-1">
+                        {filteredAndSortedRecipesForLinking.map(r => (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => {
+                              setLinkedRecipeIds([...linkedRecipeIds, r.id]);
+                              setLinkedRecipeSearch('');
+                            }}
+                            className="flex items-center gap-2 bg-white hover:bg-emerald-600 hover:text-white text-slate-800 border border-amber-300 hover:border-emerald-600 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs group"
+                          >
+                            <span className="font-bold text-emerald-600 group-hover:text-white">+</span>
+                            <span>{r.name}</span>
+                            <span className="text-[9px] bg-slate-100 group-hover:bg-emerald-700 group-hover:text-white text-slate-600 px-1.5 py-0.5 rounded-md uppercase font-mono">
+                              {r.category || 'General'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Desplegable Select Ordenado Alfabéticamente (A-Z) */}
                 <select
                   onChange={e => {
                     const val = e.target.value;
                     if (val && !linkedRecipeIds.includes(val)) {
                       setLinkedRecipeIds([...linkedRecipeIds, val]);
+                      setLinkedRecipeSearch('');
                     }
                     e.target.value = '';
                   }}
                   defaultValue=""
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                  className="w-full px-4 py-3 bg-slate-900 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none cursor-pointer hover:border-amber-500 focus:ring-2 focus:ring-amber-500 transition-all shadow-md"
                 >
-                  <option value="" disabled>+ Añadir otra ficha del recetario manualmente...</option>
-                  {allRecipes
-                    .filter(r => r.id !== initialRecipe?.id && !linkedRecipeIds.includes(r.id))
-                    .map(r => (
-                      <option key={r.id} value={r.id}>{r.name} ({r.category || 'General'})</option>
-                    ))}
+                  <option value="" disabled className="text-slate-400">
+                    {filteredAndSortedRecipesForLinking.length === 0
+                      ? `⚠️ No hay recetas coincidentes para "${linkedRecipeSearch}"`
+                      : linkedRecipeSearch
+                      ? `▼ Seleccionar de las ${filteredAndSortedRecipesForLinking.length} recetas filtradas ("${linkedRecipeSearch}")...`
+                      : `+ Seleccionar receta del listado en orden alfabético (${filteredAndSortedRecipesForLinking.length} disponibles)...`}
+                  </option>
+                  {filteredAndSortedRecipesForLinking.map(r => (
+                    <option key={r.id} value={r.id} className="bg-slate-900 text-white font-mono py-1">
+                      {r.name} ({r.category || 'General'})
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
