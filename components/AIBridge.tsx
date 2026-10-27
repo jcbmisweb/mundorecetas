@@ -290,10 +290,9 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
       setIsProcessing(true);
       await onImport(newRecipe);
       setJsonInput(''); 
-      alert(`¡Digitalización Exitosa! "${newRecipe.name}" guardada y sincronizada en Firebase Firestore ${finalTakeAwayDetails ? 'como Ficha Especial Take Away' : ''}.`);
     } catch (err: any) {
       console.error("Parse or save error:", err);
-      setError("Error de Sintaxis o Guardado: Asegúrate de copiar el bloque JSON completo. Si el error persiste, comprueba tu conexión a Firebase Firestore.");
+      setError("Error de Sintaxis o Guardado: Asegúrate de copiar el bloque JSON completo generado por la IA.");
     } finally {
       setIsProcessing(false);
     }
@@ -461,7 +460,7 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
                 {isProcessing ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                    <span>Guardando en Firebase Firestore...</span>
+                    <span>Guardando en recetario local...</span>
                   </>
                 ) : (
                   <>

@@ -765,46 +765,53 @@ function App() {
       const safeRecipe = await ensureRecipeFitsFirestore(recipeToSave);
       appendRecipeHistory(safeRecipe);
 
-      // 1. Guardar en Dexie IndexedDB local de inmediato (Offline-First)
+      // 1. PRIMERO: Guardar en Dexie IndexedDB local de inmediato (Local-First instantáneo)
       await saveRecipeLocal(safeRecipe, false);
 
-      // 2. Sincronizar en Firebase Firestore si hay conexión
-      let syncedWithCloud = false;
-      try {
-        if (navigator.onLine) {
-          await setDoc(doc(db, 'recipes', safeRecipe.id), safeRecipe, { merge: true });
-          syncedWithCloud = true;
-          await saveRecipeLocal(safeRecipe, true);
-        }
-      } catch (e) {
-        console.warn('Sincronización en la nube diferida (guardada en local):', e);
-      }
-
-      // 3. Limpiar borrador de emergencia si existía
+      // 2. Limpiar borrador de emergencia si existía
       removeEmergencyDraft(safeRecipe.id);
 
-      // 4. Actualizar estado React de inmediato (0ms de latencia)
-      const finalRecipeState = { ...safeRecipe, synced: syncedWithCloud };
+      // 3. Actualizar estado de React y memoria caché de inmediato (0ms de espera)
       setRecipes(prev => {
-        const next = [finalRecipeState, ...prev.filter(r => r.id !== safeRecipe.id)];
+        const next = [{ ...safeRecipe, synced: false }, ...prev.filter(r => r.id !== safeRecipe.id)];
         try {
           localStorage.setItem('cached_recipes', JSON.stringify(next));
         } catch (e) {}
         return next;
       });
 
-      // Comprobar umbral de sincronización en lote
-      checkBatchSyncThreshold(5);
-
+      // 4. Redirigir de inmediato al Dashboard sin esperar a la nube
       if (redirect) {
         setViewState('DASHBOARD');
         setCurrentRecipe(null);
       }
+
+      // 5. DESPUÉS: Sincronización en segundo plano con Firebase Firestore (No bloqueante, con timeout)
+      (async () => {
+        if (!navigator.onLine) return;
+        try {
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout de sincronización Firebase')), 2500)
+          );
+          await Promise.race([
+            setDoc(doc(db, 'recipes', safeRecipe.id), safeRecipe, { merge: true }),
+            timeoutPromise
+          ]);
+          // Si sube con éxito, marcar como sincronizada en Dexie y en la interfaz
+          await saveRecipeLocal(safeRecipe, true);
+          setRecipes(prev => prev.map(r => r.id === safeRecipe.id ? { ...r, synced: true } : r));
+        } catch (e) {
+          console.warn('Receta guardada en local. La sincronización con Firebase se completará en segundo plano:', e);
+        }
+      })();
+
+      // Comprobar umbral de sincronización en lote
+      checkBatchSyncThreshold(5);
     } catch (err: any) {
       console.error("Error al guardar receta:", err);
       try {
         await saveRecipeLocal(recipe, false);
-        setRecipes(prev => [recipe, ...prev.filter(r => r.id !== recipe.id)]);
+        setRecipes(prev => [{ ...recipe, synced: false }, ...prev.filter(r => r.id !== recipe.id)]);
       } catch {}
       alert(`✅ Receta guardada con éxito en la memoria local de este equipo.`);
       if (redirect) {
