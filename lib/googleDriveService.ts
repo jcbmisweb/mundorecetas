@@ -119,7 +119,7 @@ export const uploadFileToDrive = async (
   );
   form.append('file', file);
 
-  const uploadRes = await fetch(
+  let uploadRes = await fetch(
     'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink',
     {
       method: 'POST',
@@ -127,6 +127,24 @@ export const uploadFileToDrive = async (
       body: form
     }
   );
+
+  // Fallback: If folderId is restricted under drive.file scope, upload directly to user's Drive root
+  if (!uploadRes.ok && folderId) {
+    console.warn(`Target folder ${folderId} inaccessible under drive.file scope (${uploadRes.status}). Retrying directly to Drive root...`);
+    const fallbackMetadata = { name: fileName };
+    const fallbackForm = new FormData();
+    fallbackForm.append('metadata', new Blob([JSON.stringify(fallbackMetadata)], { type: 'application/json' }));
+    fallbackForm.append('file', file);
+
+    uploadRes = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fallbackForm
+      }
+    );
+  }
 
   if (!uploadRes.ok) {
     const errText = await uploadRes.text();

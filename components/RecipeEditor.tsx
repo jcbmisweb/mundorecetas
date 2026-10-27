@@ -426,13 +426,18 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       if (confirm("¿Subir portada directamente a tu carpeta de Google Drive en ALTA RESOLUCIÓN (ahorra espacio en BD)?")) {
         setPhotoFeedback("☁️ Subiendo portada a Google Drive...");
         const cleanRecipe = name ? sanitizeFileName(name) : 'receta';
-        const driveRes = await uploadFileToDrive(file, GOOGLE_DRIVE_FOLDER_ID, `RECETA_${cleanRecipe}_PORTADA`);
-        setPhoto(driveRes.directUrl);
-        const { isBanner } = await getImageAspect(driveRes.directUrl);
-        setPhotoLayout(isBanner ? 'banner' : 'classic');
-        setPhotoFeedback("✅ Imagen guardada en tu Google Drive en alta resolución.");
-        setTimeout(() => setPhotoFeedback(null), 7000);
-        return;
+        try {
+          const driveRes = await uploadFileToDrive(file, GOOGLE_DRIVE_FOLDER_ID, `RECETA_${cleanRecipe}_PORTADA`);
+          setPhoto(driveRes.directUrl);
+          const { isBanner } = await getImageAspect(driveRes.directUrl);
+          setPhotoLayout(isBanner ? 'banner' : 'classic');
+          setPhotoFeedback("✅ Imagen guardada en tu Google Drive en alta resolución.");
+          setTimeout(() => setPhotoFeedback(null), 7000);
+          return;
+        } catch (driveErr) {
+          console.warn("Drive upload encountered an issue, falling back to local compression:", driveErr);
+          setPhotoFeedback("ℹ️ Ajustando imagen en alta resolución local...");
+        }
       }
 
       // Usar compresión optimizada en alta resolución (2048px/90% calidad) para mantener los textos e infografías 100% legibles
