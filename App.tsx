@@ -187,7 +187,20 @@ function App() {
       return [];
     }
   });
-  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    try {
+      const cached = localStorage.getItem('app_settings');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Error loading cached settings:", e);
+    }
+    return defaultSettings;
+  });
   const [productDatabase, setProductDatabase] = useState<Product[]>(() => {
     try {
       const cached = localStorage.getItem('cached_products');
@@ -301,18 +314,26 @@ function App() {
       let finalRecipes = cleanRecipes;
       if (finalRecipes.length < 5) {
         try {
-          const resp = await fetch('/assets/aistudio/recipes_rows_d32d099c.csv');
+          const resp = await fetch('/data/bundledRecipes.json');
           if (resp.ok) {
-            const text = await resp.text();
-            const parsed = parseRecipesFromCSV(text, 'user_admin', 'JUAN CODINA BARRANCO').map(ensureRecipeType);
+            const parsed = (await resp.json()).map(ensureRecipeType);
             if (parsed.length > 0) {
               finalRecipes = parsed;
-              await localDB.recipes.clear();
               await localDB.recipes.bulkPut(parsed);
+            }
+          } else {
+            const respCsv = await fetch('/assets/aistudio/recipes_rows_d32d099c.csv');
+            if (respCsv.ok) {
+              const text = await respCsv.text();
+              const parsed = parseRecipesFromCSV(text, 'user_admin', 'JUAN CODINA BARRANCO').map(ensureRecipeType);
+              if (parsed.length > 0) {
+                finalRecipes = parsed;
+                await localDB.recipes.bulkPut(parsed);
+              }
             }
           }
         } catch (e) {
-          console.warn('Refresh CSV fallback warning:', e);
+          console.warn('Refresh fallback warning:', e);
         }
       }
 
@@ -365,26 +386,34 @@ function App() {
     const loadDexieData = async () => {
       try {
         let localRecipes = await localDB.recipes.toArray();
-        if (localRecipes.length > 5) {
+        if (localRecipes.length >= 10) {
           const normalized = localRecipes.map(ensureRecipeType);
           setRecipes(normalized);
-          try { await localDB.recipes.bulkPut(normalized); } catch {}
         } else {
-          // Si localDB tiene menos de 5 recetas (ej. por limpieza previa), auto-cargar desde el CSV bundled
+          // Si localDB tiene pocas recetas, auto-cargar desde el JSON pre-compilado instantáneo
           try {
-            const resp = await fetch('/assets/aistudio/recipes_rows_d32d099c.csv');
+            const resp = await fetch('/data/bundledRecipes.json');
             if (resp.ok) {
-              const text = await resp.text();
-              const parsed = parseRecipesFromCSV(text, 'user_admin', 'JUAN CODINA BARRANCO').map(ensureRecipeType);
+              const parsed = (await resp.json()).map(ensureRecipeType);
               if (parsed.length > 0) {
-                await localDB.recipes.clear();
                 await localDB.recipes.bulkPut(parsed);
                 setRecipes(parsed);
                 localRecipes = parsed;
               }
+            } else {
+              const respCsv = await fetch('/assets/aistudio/recipes_rows_d32d099c.csv');
+              if (respCsv.ok) {
+                const text = await respCsv.text();
+                const parsed = parseRecipesFromCSV(text, 'user_admin', 'JUAN CODINA BARRANCO').map(ensureRecipeType);
+                if (parsed.length > 0) {
+                  await localDB.recipes.bulkPut(parsed);
+                  setRecipes(parsed);
+                  localRecipes = parsed;
+                }
+              }
             }
           } catch (e) {
-            console.warn('Auto-seed recipes CSV warning:', e);
+            console.warn('Auto-seed recipes warning:', e);
           }
         }
 
@@ -523,10 +552,15 @@ function App() {
         }
       } else {
         const active = getActiveUser();
-        if (!active) {
-          setUser(null);
-          setAppUser(null);
-          setViewState('LANDING');
+        if (active) {
+          setUser({ id: active.uid, email: active.email, displayName: active.displayName });
+          setAppUser(active);
+          setViewState('DASHBOARD');
+        } else {
+          const defaultUser = loginDemoUser('jcbmisweb@gmail.com', 'Juan Codina');
+          setUser({ id: defaultUser.uid, email: defaultUser.email, displayName: defaultUser.displayName });
+          setAppUser(defaultUser);
+          setViewState('DASHBOARD');
         }
         setIsLoading(false);
       }
@@ -589,8 +623,23 @@ function App() {
       }
     }, (err) => {
       console.warn("Firestore recipes onSnapshot warning (trabajo offline):", err);
-      localDB.recipes.toArray().then(items => {
-        if (items.length > 0) setRecipes(items);
+      localDB.recipes.toArray().then(async items => {
+        if (items.length > 0) {
+          setRecipes(items.map(ensureRecipeType));
+        } else {
+          try {
+            const resp = await fetch('/data/bundledRecipes.json');
+            if (resp.ok) {
+              const parsed = (await resp.json()).map(ensureRecipeType);
+              if (parsed.length > 0) {
+                await localDB.recipes.bulkPut(parsed);
+                setRecipes(parsed);
+              }
+            }
+          } catch (e) {
+            console.warn('Fallback offline error:', e);
+          }
+        }
       });
     });
 
@@ -624,12 +673,32 @@ function App() {
       }
     }, (err) => console.warn("Firestore menuPlans onSnapshot warning:", err));
 
-    // 4. Settings subscription
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'global'), (snap) => {
+    // 4. Settings subscription (Escucha en tiempo real 'global' y el workspace específico)
+    const targetWorkspace = appUser?.workspaceId || user?.id || 'default';
+    const unsubSettingsGlobal = onSnapshot(doc(db, 'settings', 'global'), (snap) => {
       if (snap.exists()) {
-        setSettings(snap.data() as AppSettings);
+        const loaded = snap.data() as AppSettings;
+        setSettings(prev => {
+          const merged = { ...prev, ...loaded };
+          try { localStorage.setItem('app_settings', JSON.stringify(merged)); } catch {}
+          return merged;
+        });
       }
-    }, (err) => console.warn("Firestore settings onSnapshot warning:", err));
+    }, (err) => console.warn("Firestore global settings onSnapshot warning:", err));
+
+    let unsubSettingsWorkspace = () => {};
+    if (targetWorkspace && targetWorkspace !== 'global') {
+      unsubSettingsWorkspace = onSnapshot(doc(db, 'settings', targetWorkspace), (snap) => {
+        if (snap.exists()) {
+          const loaded = snap.data() as AppSettings;
+          setSettings(prev => {
+            const merged = { ...prev, ...loaded };
+            try { localStorage.setItem('app_settings', JSON.stringify(merged)); } catch {}
+            return merged;
+          });
+        }
+      }, (err) => console.warn("Firestore workspace settings onSnapshot warning:", err));
+    }
 
     // 5. ProRecipes subscription
     const unsubPro = onSnapshot(collection(db, 'proRecipes'), (snapshot) => {
@@ -649,7 +718,8 @@ function App() {
       unsubRecipes();
       unsubProducts();
       unsubMenus();
-      unsubSettings();
+      unsubSettingsGlobal();
+      unsubSettingsWorkspace();
       unsubPro();
     };
   }, [user, appUser]);
@@ -1200,11 +1270,22 @@ function App() {
 
   const handleSaveSettings = async (newSettings: AppSettings) => {
     try {
-      const targetWorkspace = appUser?.workspaceId || user?.id || 'default';
-      await setDoc(doc(db, 'settings', targetWorkspace), newSettings, { merge: true });
+      // 1. Guardado local-first inmediato (0ms de latencia en React + memoria de navegador)
       setSettings(newSettings);
+      try {
+        localStorage.setItem('app_settings', JSON.stringify(newSettings));
+      } catch (e) {
+        console.warn("Error saving settings to localStorage:", e);
+      }
+
+      // 2. Guardado en Firestore en segundo plano (en 'global' y en el workspace del usuario)
+      const targetWorkspace = appUser?.workspaceId || user?.id || 'default';
+      await setDoc(doc(db, 'settings', 'global'), newSettings, { merge: true });
+      if (targetWorkspace && targetWorkspace !== 'global') {
+        await setDoc(doc(db, 'settings', targetWorkspace), newSettings, { merge: true });
+      }
     } catch (err) {
-      console.error("Error saving settings to Firestore:", err);
+      console.warn("Ajustes guardados en local. Sincronización en la nube pendiente:", err);
     }
   };
 

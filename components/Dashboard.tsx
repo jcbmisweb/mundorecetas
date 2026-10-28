@@ -170,10 +170,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
       (offlineStatusFilter === 'online' && r.synced === true) || 
       (offlineStatusFilter === 'offline' && r.synced === false);
 
-    const isMine = r.workspaceId === appUser?.workspaceId;
-    const isPublic = r.isPublic === true;
-    const isLocal = r.synced === false;
-    const isVisible = isActuallyAdmin || isMine || isPublic || isLocal || !appUser;
+    // Garantizar visibilidad total de todas las recetas del catálogo escolar
+    const isVisible = true;
     return matchesSearch && matchesCategory && matchesOfflineStatus && isVisible;
   });
 
