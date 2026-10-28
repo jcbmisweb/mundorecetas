@@ -214,9 +214,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const addCategory = () => {
     if (newCat.trim()) {
       const name = newCat.trim();
+      const currentCats = localSettings.categories || [];
+      if (currentCats.some(c => c.toLowerCase() === name.toLowerCase())) {
+        alert(`La categoría "${name}" ya existe.`);
+        return;
+      }
       setLocalSettings({
         ...localSettings,
-        categories: [...(localSettings.categories || []), name],
+        categories: [...currentCats, name],
         categoryConfigs: [...(localSettings.categoryConfigs || []), { name, colors: ['#94a3b8'] }]
       });
       setNewCat('');

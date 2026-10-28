@@ -477,6 +477,53 @@ function App() {
     };
   }, []);
 
+  // Auto-descubrimiento de categorías asociadas a recetas para asegurar que NUNCA falte ninguna en el panel
+  useEffect(() => {
+    if (recipes.length > 0) {
+      const foundCats = new Set<string>();
+      recipes.forEach(r => {
+        if (Array.isArray(r.categories)) {
+          r.categories.forEach(c => { if (c && c.trim()) foundCats.add(c.trim()); });
+        }
+        if (r.category && r.category.trim()) {
+          foundCats.add(r.category.trim());
+        }
+      });
+
+      if (foundCats.size > 0) {
+        setSettings(prev => {
+          const currentCats = new Set(prev.categories || []);
+          let newFound = false;
+          foundCats.forEach(c => {
+            if (!currentCats.has(c)) {
+              currentCats.add(c);
+              newFound = true;
+            }
+          });
+
+          if (newFound) {
+            const nextCats = Array.from(currentCats);
+            const nextConfigs = [...(prev.categoryConfigs || [])];
+            nextCats.forEach(c => {
+              if (!nextConfigs.some(conf => conf.name === c)) {
+                nextConfigs.push({ name: c, colors: ['#94a3b8'] });
+              }
+            });
+            const updated: AppSettings = {
+              ...prev,
+              categories: nextCats,
+              categoryConfigs: nextConfigs,
+              lastModified: Date.now()
+            };
+            try { localStorage.setItem('app_settings', JSON.stringify(updated)); } catch {}
+            return updated;
+          }
+          return prev;
+        });
+      }
+    }
+  }, [recipes]);
+
   // Auth Listener (Firebase Auth + Active / Demo User)
   useEffect(() => {
     // 1. Check for Active / Demo User in local storage for instant offline boot
@@ -673,16 +720,42 @@ function App() {
       }
     }, (err) => console.warn("Firestore menuPlans onSnapshot warning:", err));
 
-    // 4. Settings subscription (Escucha en tiempo real 'global' y el workspace específico)
+    // 4. Settings subscription (con fusión inteligente de categorías y protección de timestamp)
     const targetWorkspace = appUser?.workspaceId || user?.id || 'default';
+    const mergeIncomingSettings = (loaded: AppSettings) => {
+      setSettings(prev => {
+        const localTime = prev.lastModified || 0;
+        const remoteTime = loaded.lastModified || 0;
+
+        // Fusión unión de categorías: NUNCA perder ninguna categoría existente en local ni en remoto
+        const unionCategories = Array.from(new Set([
+          ...(prev.categories || []),
+          ...(loaded.categories || [])
+        ])).filter(Boolean);
+
+        const unionConfigs = [...(prev.categoryConfigs || [])];
+        (loaded.categoryConfigs || []).forEach(rc => {
+          if (!unionConfigs.some(lc => lc.name === rc.name)) {
+            unionConfigs.push(rc);
+          }
+        });
+
+        const merged: AppSettings = {
+          ...loaded,
+          ...prev,
+          categories: unionCategories,
+          categoryConfigs: unionConfigs,
+          lastModified: Math.max(localTime, remoteTime)
+        };
+
+        try { localStorage.setItem('app_settings', JSON.stringify(merged)); } catch {}
+        return merged;
+      });
+    };
+
     const unsubSettingsGlobal = onSnapshot(doc(db, 'settings', 'global'), (snap) => {
       if (snap.exists()) {
-        const loaded = snap.data() as AppSettings;
-        setSettings(prev => {
-          const merged = { ...prev, ...loaded };
-          try { localStorage.setItem('app_settings', JSON.stringify(merged)); } catch {}
-          return merged;
-        });
+        mergeIncomingSettings(snap.data() as AppSettings);
       }
     }, (err) => console.warn("Firestore global settings onSnapshot warning:", err));
 
@@ -690,12 +763,7 @@ function App() {
     if (targetWorkspace && targetWorkspace !== 'global') {
       unsubSettingsWorkspace = onSnapshot(doc(db, 'settings', targetWorkspace), (snap) => {
         if (snap.exists()) {
-          const loaded = snap.data() as AppSettings;
-          setSettings(prev => {
-            const merged = { ...prev, ...loaded };
-            try { localStorage.setItem('app_settings', JSON.stringify(merged)); } catch {}
-            return merged;
-          });
+          mergeIncomingSettings(snap.data() as AppSettings);
         }
       }, (err) => console.warn("Firestore workspace settings onSnapshot warning:", err));
     }
@@ -1270,19 +1338,24 @@ function App() {
 
   const handleSaveSettings = async (newSettings: AppSettings) => {
     try {
+      const settingsToSave: AppSettings = {
+        ...newSettings,
+        lastModified: Date.now()
+      };
+
       // 1. Guardado local-first inmediato (0ms de latencia en React + memoria de navegador)
-      setSettings(newSettings);
+      setSettings(settingsToSave);
       try {
-        localStorage.setItem('app_settings', JSON.stringify(newSettings));
+        localStorage.setItem('app_settings', JSON.stringify(settingsToSave));
       } catch (e) {
         console.warn("Error saving settings to localStorage:", e);
       }
 
       // 2. Guardado en Firestore en segundo plano (en 'global' y en el workspace del usuario)
       const targetWorkspace = appUser?.workspaceId || user?.id || 'default';
-      await setDoc(doc(db, 'settings', 'global'), newSettings, { merge: true });
+      await setDoc(doc(db, 'settings', 'global'), settingsToSave, { merge: true });
       if (targetWorkspace && targetWorkspace !== 'global') {
-        await setDoc(doc(db, 'settings', targetWorkspace), newSettings, { merge: true });
+        await setDoc(doc(db, 'settings', targetWorkspace), settingsToSave, { merge: true });
       }
     } catch (err) {
       console.warn("Ajustes guardados en local. Sincronización en la nube pendiente:", err);

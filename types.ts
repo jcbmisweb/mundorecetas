@@ -383,6 +383,7 @@ export interface AppSettings {
   workSchedule?: WorkScheduleDay[];
   defaultGroupCount?: number;
   menuRoles?: string[];
+  lastModified?: number;
 }
 
 export interface AppBackup {
