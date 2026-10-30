@@ -111,28 +111,12 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
   const [dynamicPax, setDynamicPax] = useState<number>(
     recipe.yieldQuantity || 4,
   );
-  const [isBanner, setIsBanner] = useState<boolean>(
-    recipe.photoLayout !== "classic",
-  );
+  const [isBanner] = useState<boolean>(true);
   const [viewMode, setViewMode] = useState<
     "complete" | "minimal" | "takeaway_slip"
   >("complete");
   const [includeAnalysis, setIncludeAnalysis] = useState<boolean>(true);
   const [showPromptModal, setShowPromptModal] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (!recipe.photo) {
-      setIsBanner(false);
-      return;
-    }
-    // Si la receta tiene guardado 'classic' explícitamente, se respeta 'classic':
-    if (recipe.photoLayout === "classic") {
-      setIsBanner(false);
-      return;
-    }
-    // Por defecto para todas las demás (sin layout o 'banner' / 'auto'), usar disposición Superior (Caballa "bien"):
-    setIsBanner(true);
-  }, [recipe.photo, recipe.photoLayout]);
 
   useEffect(() => {
     const originalTitle = document.title;
@@ -276,11 +260,11 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
           __html: `
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .page-break { page-break-before: always; break-before: page; }
-          .no-break { break-inside: avoid; page-break-inside: avoid; }
+          .page-break { page-break-before: always !important; break-before: page !important; }
+          .no-break { break-inside: avoid !important; page-break-inside: avoid !important; }
           .instructions-text { font-size: 10px !important; line-height: 1.4 !important; }
           .ingredients-table { font-size: 10px !important; }
-          .video-list-container { break-inside: avoid; page-break-inside: avoid; }
+          .video-list-container { break-inside: avoid !important; page-break-inside: avoid !important; }
           
           @page {
             margin: 12mm 10mm 14mm 10mm;
@@ -354,37 +338,6 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             </button>
           )}
 
-          {recipe.photo && viewMode === "complete" && (
-            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm no-print">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 pr-1">
-                Disposición:
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsBanner(true)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${
-                  isBanner
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-                title="Ver/imprimir con la imagen en la cabecera superior en ancho completo"
-              >
-                🌟 Superior
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsBanner(false)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${
-                  !isBanner
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-                title="Ver/imprimir con la imagen en el formato clásico lateral"
-              >
-                📄 Clásica
-              </button>
-            </div>
-          )}
           {/* Selector de Inclusión de Análisis Molecular en Impresión (por defecto sí) */}
           <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm no-print">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 pr-1">
@@ -1024,87 +977,85 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             </div>
           </div>
 
-          {/* BANNER PANORÁMICO SUPERIOR (Infografía de Emplatado / Diagrama + Foto) */}
-          {recipe.photo && isBanner && (
-            <div className="w-full rounded-2xl overflow-hidden border-2 border-slate-900 mb-6 bg-white shadow-md print:shadow-none print:border-black break-inside-avoid flex justify-center items-center">
+          {/* BANNER PANORÁMICO SUPERIOR (Infografía de Emplatado / Diagrama + Foto) - MODELO LUBINA */}
+          {recipe.photo && (
+            <div className="w-full rounded-2xl overflow-hidden border-2 border-slate-900 mb-5 bg-white shadow-md print:shadow-none print:border-black break-inside-avoid flex justify-center items-center">
               <img
                 src={recipe.photo}
                 alt={recipe.name}
-                className="w-full h-auto object-contain max-h-[460px] print:max-h-[360px] mx-auto block"
+                className="w-full h-auto object-contain max-h-[460px] print:max-h-[300px] mx-auto block"
               />
             </div>
           )}
 
-          {/* BLOQUE DE EXPLICACIÓN COMERCIAL - Más compacto */}
-          <div className="bg-white border-2 border-slate-900 text-slate-900 p-6 rounded-2xl mb-6 flex items-start gap-6 relative overflow-hidden break-inside-avoid">
-            <div className="bg-amber-500 p-3 rounded-xl text-slate-900 shrink-0 shadow-lg">
-              <MessageSquare size={24} />
+          {/* BLOQUE DE EXPLICACIÓN COMERCIAL */}
+          <div className="bg-white border-2 border-slate-900 text-slate-900 p-5 print:p-4 rounded-2xl mb-5 flex items-start gap-5 relative overflow-hidden break-inside-avoid">
+            <div className="bg-amber-500 p-2.5 rounded-xl text-slate-900 shrink-0 shadow-md">
+              <MessageSquare size={22} />
             </div>
             <div className="flex-grow">
               <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-1">
                 Explicación Sugerente (Servicio)
               </p>
-              <p className="text-base font-medium italic leading-snug text-slate-700 font-serif">
+              <p className="text-base print:text-sm font-medium italic leading-snug text-slate-700 font-serif">
                 "{recipe.serviceDetails?.clientDescription || "No definida."}"
               </p>
             </div>
           </div>
 
-          {/* CONTROL DE ALÉRGENOS - FORMATO COMPACTO Y ULTRA FUNCIONAL */}
-          {isBanner && (
-            <div className="w-full bg-white rounded-xl px-4 py-3 border border-slate-900 break-inside-avoid shadow-xs mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                {/* Declaración de alérgenos activos */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 shrink-0 text-slate-900">
-                    <AlertOctagon size={13} className="text-amber-500" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">
-                      Alérgenos:
-                    </span>
-                  </div>
-                  {allAllergens.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 items-center">
-                      {allAllergens.map((a) => (
-                        <span
-                          key={a}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-rose-800 border border-rose-300 rounded-lg text-[9px] font-black uppercase shadow-xs"
-                        >
-                          <AllergenIcon allergen={a} size={14} />
-                          <span>{a}</span>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[9px] font-black uppercase shadow-xs">
-                      <Check size={12} className="text-emerald-600" />
-                      <span>
-                        Sin alérgenos de declaración obligatoria (100% Libre)
-                      </span>
-                    </span>
-                  )}
+          {/* CONTROL DE ALÉRGENOS - FORMATO COMPACTO Y ULTRA FUNCIONAL (MODELO LUBINA) */}
+          <div className="w-full bg-white rounded-xl px-4 py-3 border border-slate-900 break-inside-avoid shadow-xs mb-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              {/* Declaración de alérgenos activos */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 shrink-0 text-slate-900">
+                  <AlertOctagon size={13} className="text-amber-500" />
+                  <span className="text-[9px] font-black uppercase tracking-widest">
+                    Alérgenos:
+                  </span>
                 </div>
-
-                {/* Micro-Tira de Verificación de los 14 Alérgenos Reglamentarios */}
-                <div
-                  className="flex items-center gap-1 shrink-0 bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-200"
-                  title="Matriz legal de 14 alérgenos UE 1169/2011"
-                >
-                  {ALLERGEN_LIST.map((allergen) => {
-                    const isPresent = allAllergens.includes(allergen);
-                    return (
-                      <div
-                        key={allergen}
-                        className={`transition-all ${isPresent ? "opacity-100 scale-110 drop-shadow-xs" : "opacity-20 grayscale"}`}
-                        title={`${allergen}: ${isPresent ? "PRESENTE" : "No contiene"}`}
+                {allAllergens.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    {allAllergens.map((a) => (
+                      <span
+                        key={a}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-rose-800 border border-rose-300 rounded-lg text-[9px] font-black uppercase shadow-xs"
                       >
-                        <AllergenIcon allergen={allergen} size={15} />
-                      </div>
-                    );
-                  })}
-                </div>
+                        <AllergenIcon allergen={a} size={14} />
+                        <span>{a}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[9px] font-black uppercase shadow-xs">
+                    <Check size={12} className="text-emerald-600" />
+                    <span>
+                      Sin alérgenos de declaración obligatoria (100% Libre)
+                    </span>
+                  </span>
+                )}
+              </div>
+
+              {/* Micro-Tira de Verificación de los 14 Alérgenos Reglamentarios */}
+              <div
+                className="flex items-center gap-1 shrink-0 bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-200"
+                title="Matriz legal de 14 alérgenos UE 1169/2011"
+              >
+                {ALLERGEN_LIST.map((allergen) => {
+                  const isPresent = allAllergens.includes(allergen);
+                  return (
+                    <div
+                      key={allergen}
+                      className={`transition-all ${isPresent ? "opacity-100 scale-110 drop-shadow-xs" : "opacity-20 grayscale"}`}
+                      title={`${allergen}: ${isPresent ? "PRESENTE" : "No contiene"}`}
+                    >
+                      <AllergenIcon allergen={allergen} size={15} />
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          )}
+          </div>
 
           {/* VÍDEOS Y ENLACES GENERALES DEL PLATO */}
           {recipe.videos?.length || recipe.sourceUrl || recipe.videoUrl ? (
@@ -1116,92 +1067,19 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             />
           ) : null}
 
-          <div className="space-y-8 mb-8">
-            {/* FOTO Y ALÉRGENOS - FORMATO CLÁSICO LATERAL */}
-            {!isBanner && (
-              <div className="flex gap-4 items-stretch break-inside-avoid mb-4">
-                {recipe.photo && (
-                  <div className="w-1/3 max-w-[220px] aspect-[4/3] rounded-xl overflow-hidden border border-slate-900 shrink-0 bg-slate-50 flex items-center justify-center">
-                    <img
-                      src={recipe.photo}
-                      alt={recipe.name}
-                      className="w-full h-full object-contain mx-auto p-0.5"
-                    />
-                  </div>
-                )}
+          {/* TÍTULO DE SECCIÓN AL CIERRE DE PÁGINA 1 */}
+          <div className="border-b-2 border-slate-900 pb-1 mb-4 break-inside-avoid">
+            <h3 className="font-black text-slate-900 uppercase tracking-tighter text-xs">
+              DESARROLLO TÉCNICO POR ELABORACIÓN
+            </h3>
+          </div>
 
-                <div className="flex-grow bg-white rounded-xl p-3.5 border border-slate-900 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <AlertOctagon size={13} className="text-amber-500" />
-                        <span className="text-[9px] font-black text-slate-900 uppercase tracking-widest">
-                          Declaración de Alérgenos
-                        </span>
-                      </div>
-                      {allAllergens.length > 0 ? (
-                        <span className="text-[8px] font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
-                          {allAllergens.length} presente
-                          {allAllergens.length > 1 ? "s" : ""}
-                        </span>
-                      ) : (
-                        <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                          0 declarados
-                        </span>
-                      )}
-                    </div>
+          {/* SALTO DE PÁGINA: Comienzo de Elaboraciones en Página 2 */}
+          <div className="page-break" />
 
-                    {allAllergens.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5 mb-2.5">
-                        {allAllergens.map((a) => (
-                          <span
-                            key={a}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-rose-800 border border-rose-300 rounded-lg text-[9px] font-black uppercase shadow-xs"
-                          >
-                            <AllergenIcon allergen={a} size={14} />
-                            <span>{a}</span>
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[9px] font-black uppercase mb-2.5 flex items-center gap-1.5">
-                        <Check size={13} className="text-emerald-600" />
-                        <span>
-                          Sin alérgenos de declaración obligatoria (100% Libre)
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Micro-Tira de Verificación de los 14 Alérgenos Reglamentarios */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                    <span className="text-[7.5px] font-black uppercase text-slate-400 tracking-wider">
-                      Reglamento UE:
-                    </span>
-                    <div className="flex items-center gap-1">
-                      {ALLERGEN_LIST.map((allergen) => {
-                        const isPresent = allAllergens.includes(allergen);
-                        return (
-                          <div
-                            key={allergen}
-                            className={`transition-all ${isPresent ? "opacity-100 scale-110 drop-shadow-xs" : "opacity-20 grayscale"}`}
-                            title={`${allergen}: ${isPresent ? "PRESENTE" : "No contiene"}`}
-                          >
-                            <AllergenIcon allergen={allergen} size={14} />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ELABORACIONES: ESCANDALLO + PROCESO JUNTOS */}
+          {/* ELABORACIONES: ESCANDALLO + PROCESO */}
+          <div className="space-y-8 mb-8 pt-2">
             <div className="space-y-6">
-              <h3 className="font-black text-slate-900 uppercase tracking-tighter text-xs border-b-2 border-slate-900 pb-1">
-                DESARROLLO TÉCNICO POR ELABORACIÓN
-              </h3>
               {(recipe.subRecipes || []).map((sub, sIdx) => (
                 <div
                   key={sub.id}
@@ -1734,76 +1612,105 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             </div>
           )}
 
-          {/* Infografía de Pastelería Anexa si es de tipo pastry y tiene infografía */}
-          {(recipe.recipeType === "pastry" ||
-            recipe.takeAwayDetails?.recipeType === "pastry") &&
-            (recipe.pastryInfographic ||
-              recipe.takeAwayDetails?.pastryInfographic) && (
-              <div className="page-break max-w-4xl mx-auto my-8 pt-8 border-t-4 border-slate-900">
-                <div className="bg-gradient-to-r from-rose-900 via-rose-800 to-pink-900 text-white p-4 rounded-2xl mb-4 flex items-center justify-between shadow-md">
+          {/* ========================================================================= */}
+          {/* INFOGRAFÍA TÉCNICA DIDÁCTICA (HOJA APARTE AL FINAL DE LA FICHA)            */}
+          {/* ========================================================================= */}
+          {(() => {
+            const infographicSrc =
+              recipe.pastryInfographic ||
+              recipe.infographicUrl ||
+              recipe.takeAwayDetails?.pastryInfographic;
+            if (!infographicSrc) return null;
+
+            const isImage =
+              infographicSrc.startsWith("data:image") ||
+              infographicSrc.startsWith("http") ||
+              infographicSrc.startsWith("/") ||
+              infographicSrc.includes("googleusercontent.com") ||
+              infographicSrc.includes("drive.google.com");
+
+            return (
+              <div className="page-break max-w-4xl mx-auto my-8 pt-8 border-t-4 border-slate-900 print:border-none print:m-0 print:p-0">
+                {/* Cabecera en pantalla */}
+                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-2xl mb-4 flex items-center justify-between shadow-md no-print">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-rose-500/30 border border-rose-400/40 rounded-xl text-rose-200">
+                    <div className="p-2 bg-indigo-500/30 border border-indigo-400/40 rounded-xl text-indigo-200">
                       <Sparkles size={20} />
                     </div>
                     <div>
                       <h3 className="text-sm font-black uppercase tracking-wider">
-                        🧁 Infografía Didáctica de Pastelería · Lámina Técnica
-                        de Obrador
+                        📊 Infografía Técnica Didáctica · Hoja Técnica Anexa
                       </h3>
-                      <p className="text-[10px] text-rose-200">
-                        Recurso visual didáctico integrado para la ejecución y
-                        evaluación de la elaboración.
+                      <p className="text-[10px] text-slate-300">
+                        Recurso visual didáctico para la ejecución técnica, procesos y montaje del plato.
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={() => window.print()}
-                    className="px-3 py-1.5 bg-white text-rose-950 rounded-xl text-xs font-black uppercase hover:bg-rose-50 transition-all flex items-center gap-1.5 no-print shadow-xs"
+                    className="px-3 py-1.5 bg-white text-slate-950 rounded-xl text-xs font-black uppercase hover:bg-slate-100 transition-all flex items-center gap-1.5 no-print shadow-xs"
                   >
-                    <Printer size={14} /> Imprimir Lámina
+                    <Printer size={14} /> Imprimir Hoja
                   </button>
                 </div>
 
-                <div className="bg-white border-2 border-slate-900 rounded-3xl p-6 print:p-2 text-slate-900 shadow-md print:shadow-none flex flex-col items-center justify-center min-h-[600px]">
-                  {(
-                    recipe.pastryInfographic ||
-                    recipe.takeAwayDetails?.pastryInfographic ||
-                    ""
-                  ).startsWith("data:image") ||
-                  (
-                    recipe.pastryInfographic ||
-                    recipe.takeAwayDetails?.pastryInfographic ||
-                    ""
-                  ).startsWith("http") ? (
+                {/* Cabecera académica para impresión */}
+                <div className="hidden print:flex justify-between items-center pb-2.5 mb-3 border-b-2 border-slate-900">
+                  <div>
+                    <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      {settings.instituteName} · INFOGRAFÍA TÉCNICA DIDÁCTICA
+                    </span>
+                    <h2 className="text-xl font-serif font-black uppercase tracking-tight text-slate-900">
+                      {recipe.name}
+                    </h2>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block">
+                      {recipe.category || "Ficha Técnica"}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-700">
+                      Hoja Anexa de Infografía
+                    </span>
+                  </div>
+                </div>
+
+                {/* Contenedor de la Infografía a página completa */}
+                <div className="bg-white border-2 border-slate-900 rounded-3xl p-4 print:p-0 print:border-none text-slate-900 shadow-md print:shadow-none flex flex-col items-center justify-center min-h-[600px] print:min-h-0">
+                  {isImage ? (
                     <img
-                      src={
-                        recipe.pastryInfographic ||
-                        recipe.takeAwayDetails?.pastryInfographic
-                      }
-                      alt="Infografía Didáctica de Pastelería"
-                      className="max-w-full max-h-[850px] object-contain mx-auto rounded-xl border border-slate-200 shadow-sm"
+                      src={infographicSrc}
+                      alt={`Infografía técnica de ${recipe.name}`}
+                      className="max-w-full max-h-[820px] print:max-h-[250mm] object-contain mx-auto rounded-xl print:rounded-none shadow-sm print:shadow-none block"
                     />
                   ) : (
                     <div className="w-full text-center py-12 space-y-4">
-                      <div className="text-3xl">📄</div>
-                      <p className="font-black text-slate-900 uppercase">
-                        Documento de Infografía Anexo
+                      <div className="text-4xl">📄</div>
+                      <p className="font-black text-slate-900 uppercase text-sm">
+                        Documento Técnico de Infografía Anexo
                       </p>
                       <a
-                        href={
-                          recipe.pastryInfographic ||
-                          recipe.takeAwayDetails?.pastryInfographic
-                        }
-                        download="infografia_pasteleria.pdf"
-                        className="px-6 py-3 bg-rose-700 text-white rounded-xl font-black text-xs uppercase inline-flex items-center gap-2 hover:bg-rose-800 transition-all shadow-md"
+                        href={infographicSrc}
+                        download={`infografia_${recipe.name.replace(/\s+/g, '_')}.pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase inline-flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md no-print"
                       >
-                        <Download size={16} /> Descargar Archivo Infografía
+                        <Download size={16} /> Abrir / Descargar Archivo de Infografía
                       </a>
                     </div>
                   )}
                 </div>
+
+                {/* Pie de página de la hoja de infografía para impresión */}
+                <div className="hidden print:flex items-center justify-between text-[7.5px] font-bold uppercase tracking-widest text-slate-400 border-t border-slate-200 pt-2.5 mt-3">
+                  <span>
+                    {recipe.name} • Infografía Técnica Didáctica
+                  </span>
+                  <span>{settings.instituteName}</span>
+                </div>
               </div>
-            )}
+            );
+          })()}
 
           {/* Pie de página limpio */}
           <div className="mt-8 text-center text-[9px] text-slate-300 font-black uppercase tracking-[0.4em] print:hidden border-t border-slate-50 pt-6">

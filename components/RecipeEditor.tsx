@@ -77,7 +77,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   const [yieldQuantity, setYieldQuantity] = useState<number>(1);
   const [yieldUnit, setYieldUnit] = useState('Raciones');
   const [photo, setPhoto] = useState('');
-  const [photoLayout, setPhotoLayout] = useState<'classic' | 'banner' | 'auto'>('classic');
+  const [photoLayout, setPhotoLayout] = useState<'classic' | 'banner' | 'auto'>('banner');
   const [photoFeedback, setPhotoFeedback] = useState<string | null>(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [creator, setCreator] = useState(appUser?.teacherName || appUser?.displayName || '');
@@ -164,11 +164,8 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       setYieldQuantity(initialRecipe.yieldQuantity);
       setYieldUnit(initialRecipe.yieldUnit);
       setPhoto(initialRecipe.photo);
-      // Para las más de 150 recetas existentes anteriores a esta actualización:
-      // Si la receta ya tiene una disposición ('banner' o 'classic'), la respetamos.
-      // Si no tiene photoLayout definido (recetas históricas), se mantiene 'classic' por defecto
-      // para que sus fotos no cambien solas de ubicación.
-      setPhotoLayout(initialRecipe.photoLayout || 'classic');
+      // Usar 'banner' (Modelo Lubina) por defecto para todas las fichas técnicas
+      setPhotoLayout(initialRecipe.photoLayout === 'classic' ? 'banner' : (initialRecipe.photoLayout || 'banner'));
       setCreator(initialRecipe.creator || appUser?.teacherName || appUser?.displayName || '');
       setSourceUrl(initialRecipe.sourceUrl || '');
       setRecipeVideos(normalizeVideos(initialRecipe.videos, initialRecipe.sourceUrl || initialRecipe.videoUrl));
@@ -880,108 +877,106 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                    </div>
                 </div>
 
-                {/* Sección de Infografía de Pastelería si el tipo es pastry */}
-                {recipeType === 'pastry' && (
-                  <div className="md:col-span-3 bg-gradient-to-r from-rose-50 to-pink-50 p-5 rounded-2xl border border-rose-200 shadow-sm space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs">
-                          <Sparkles size={18} />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-black uppercase text-rose-950 tracking-wide">
-                            Infografía Didáctica de Pastelería (Lámina Técnica de Obrador)
-                          </h4>
-                          <p className="text-[10px] text-rose-800">
-                            Sube o vincula la infografía técnica (imagen o PDF). Se almacenará en la base de datos y se adjuntará automáticamente al imprimir la ficha técnica.
-                          </p>
-                        </div>
+                {/* Sección de Infografía Técnica Didáctica (disponible para todas las recetas) */}
+                <div className="md:col-span-3 bg-gradient-to-r from-indigo-50/70 via-purple-50/50 to-pink-50/60 p-5 rounded-2xl border border-indigo-200 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
+                        <Sparkles size={18} />
                       </div>
-                      {pastryInfographic && (
-                        <button
-                          type="button"
-                          onClick={() => setPastryInfographic('')}
-                          className="px-2.5 py-1 bg-rose-200 hover:bg-rose-300 text-rose-950 rounded-lg text-[10px] font-bold transition-all"
-                        >
-                          Eliminar Infografía
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex flex-col sm:flex-row items-center gap-2">
-                        <input 
-                          type="file" 
-                          accept="image/*,application/pdf"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            try {
-                              if (confirm("¿Subir directamente a tu carpeta de Google Drive en ALTA RESOLUCIÓN (sin comprimir)?")) {
-                                alert("Iniciando subida a tu carpeta de Google Drive...");
-                                const cleanRecipe = name ? sanitizeFileName(name) : 'receta';
-                                const driveRes = await uploadFileToDrive(file, GOOGLE_DRIVE_FOLDER_ID, `RECETA_${cleanRecipe}_INFOGRAFIA`);
-                                setPastryInfographic(driveRes.directUrl);
-                                alert("✅ Infografía subida correctamente a tu Google Drive.");
-                              } else {
-                                if (file.type.startsWith('image/')) {
-                                  const compressed = await compressHeroBannerImage(file);
-                                  setPastryInfographic(compressed);
-                                } else {
-                                  const reader = new FileReader();
-                                  reader.onload = (uploadEvent) => {
-                                    const res = uploadEvent.target?.result as string;
-                                    if (res) setPastryInfographic(res);
-                                  };
-                                  reader.readAsDataURL(file);
-                                }
-                              }
-                            } catch (err: any) {
-                              console.error("Error reading/uploading infographic file:", err);
-                              alert(`Error al procesar la infografía: ${err?.message || err}`);
-                            }
-                          }}
-                          className="w-full text-xs text-rose-900 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-rose-600 file:text-white hover:file:bg-rose-700 transition-all cursor-pointer bg-white border border-rose-300 rounded-xl p-1.5"
-                        />
-                      </div>
-
-                      <div className="relative">
-                        <input
-                          type="text"
-                          placeholder="O pega aquí el enlace de Google Drive o URL externa de la infografía..."
-                          value={pastryInfographic || ''}
-                          onChange={e => {
-                            const raw = e.target.value;
-                            const transformed = transformDriveUrl(raw);
-                            setPastryInfographic(transformed);
-                          }}
-                          className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl text-xs font-bold text-rose-950 placeholder:text-rose-300 outline-none focus:ring-2 focus:ring-rose-500"
-                        />
-                        {pastryInfographic?.includes('googleusercontent.com') && (
-                          <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                            ☁️ Enlazado desde Google Drive (0 bytes en BD)
-                          </span>
-                        )}
+                      <div>
+                        <h4 className="text-xs font-black uppercase text-slate-900 tracking-wide">
+                          Infografía Técnica Didáctica (Lámina Técnica de Elaboración / Obrador / Emplatado)
+                        </h4>
+                        <p className="text-[10px] text-slate-600">
+                          Sube o vincula la infografía técnica (imagen o PDF de Google Drive). Se adjuntará automáticamente en una hoja aparte al final de la ficha al imprimir.
+                        </p>
                       </div>
                     </div>
-
                     {pastryInfographic && (
-                      <div className="mt-3 p-2 bg-white rounded-xl border border-rose-200 flex items-center gap-4">
-                        {pastryInfographic.startsWith('data:image') || pastryInfographic.startsWith('http') ? (
-                          <img src={pastryInfographic} alt="Infografía Pastelería" className="h-20 w-32 object-cover rounded-lg border border-rose-200 shadow-xs" />
-                        ) : (
-                          <div className="h-20 w-32 bg-rose-100 rounded-lg flex items-center justify-center text-rose-800 font-bold text-xs">
-                            PDF / Archivo Adjunto
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-[10px] font-black uppercase tracking-wider text-rose-900 block">Infografía Cargada Correctamente</span>
-                          <span className="text-[9px] text-rose-700">Lista para integrarse en la impresión de la ficha técnica de pastelería.</span>
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPastryInfographic('')}
+                        className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-lg text-[10px] font-bold transition-all"
+                      >
+                        Eliminar Infografía
+                      </button>
                     )}
                   </div>
-                )}
+
+                  <div className="space-y-2">
+                    <div className="flex flex-col sm:flex-row items-center gap-2">
+                      <input 
+                        type="file" 
+                        accept="image/*,application/pdf"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            if (confirm("¿Subir directamente a tu carpeta de Google Drive en ALTA RESOLUCIÓN (sin comprimir)?")) {
+                              alert("Iniciando subida a tu carpeta de Google Drive...");
+                              const cleanRecipe = name ? sanitizeFileName(name) : 'receta';
+                              const driveRes = await uploadFileToDrive(file, GOOGLE_DRIVE_FOLDER_ID, `RECETA_${cleanRecipe}_INFOGRAFIA`);
+                              setPastryInfographic(driveRes.directUrl);
+                              alert("✅ Infografía subida correctamente a tu Google Drive.");
+                            } else {
+                              if (file.type.startsWith('image/')) {
+                                const compressed = await compressHeroBannerImage(file);
+                                setPastryInfographic(compressed);
+                              } else {
+                                const reader = new FileReader();
+                                reader.onload = (uploadEvent) => {
+                                  const res = uploadEvent.target?.result as string;
+                                  if (res) setPastryInfographic(res);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }
+                          } catch (err: any) {
+                            console.error("Error reading/uploading infographic file:", err);
+                            alert(`Error al procesar la infografía: ${err?.message || err}`);
+                          }
+                        }}
+                        className="w-full text-xs text-indigo-950 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 transition-all cursor-pointer bg-white border border-indigo-200 rounded-xl p-1.5"
+                      />
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="O pega aquí el enlace de Google Drive o URL externa de la infografía técnica..."
+                        value={pastryInfographic || ''}
+                        onChange={e => {
+                          const raw = e.target.value;
+                          const transformed = transformDriveUrl(raw);
+                          setPastryInfographic(transformed);
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      {pastryInfographic?.includes('googleusercontent.com') && (
+                        <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          ☁️ Enlazado desde Google Drive (0 bytes en BD)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {pastryInfographic && (
+                    <div className="mt-3 p-2.5 bg-white rounded-xl border border-indigo-100 flex items-center gap-4">
+                      {pastryInfographic.startsWith('data:image') || pastryInfographic.startsWith('http') || pastryInfographic.includes('googleusercontent.com') ? (
+                        <img src={pastryInfographic} alt="Infografía Técnica" className="h-20 w-32 object-cover rounded-lg border border-slate-200 shadow-xs" />
+                      ) : (
+                        <div className="h-20 w-32 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-800 font-bold text-xs text-center p-1">
+                          PDF / Documento Anexo
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-900 block">Infografía Técnica Registrada</span>
+                        <span className="text-[9px] text-slate-600">Se imprimirá automáticamente en una página dedicada al final de la ficha técnica.</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 shadow-inner">
                   <label className="block text-[10px] font-black text-amber-700 uppercase mb-2 flex items-center gap-2">
                     <Users size={12}/> Rendimiento (PAX)
