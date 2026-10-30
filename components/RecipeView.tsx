@@ -8,6 +8,7 @@ import {
   isUserOwner,
 } from "../types";
 import { formatScaledQuantity } from "../lib/unitUtils";
+import { transformDriveUrl } from "../lib/googleDriveService";
 import {
   Printer,
   ArrowLeft,
@@ -1616,11 +1617,13 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
           {/* INFOGRAFÍA TÉCNICA DIDÁCTICA (HOJA APARTE AL FINAL DE LA FICHA)            */}
           {/* ========================================================================= */}
           {(() => {
-            const infographicSrc =
+            const rawInfographic =
               recipe.pastryInfographic ||
               recipe.infographicUrl ||
               recipe.takeAwayDetails?.pastryInfographic;
-            if (!infographicSrc) return null;
+            if (!rawInfographic) return null;
+
+            const infographicSrc = transformDriveUrl(rawInfographic);
 
             const isImage =
               infographicSrc.startsWith("data:image") ||
