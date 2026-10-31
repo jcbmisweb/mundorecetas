@@ -929,7 +929,7 @@ function App() {
         if (!navigator.onLine) return;
         try {
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout de sincronización Firebase')), 2500)
+            setTimeout(() => reject(new Error('Timeout de sincronización Firebase')), 12000)
           );
           await Promise.race([
             setDoc(doc(db, 'recipes', safeRecipe.id), safeRecipe, { merge: true }),
@@ -1872,7 +1872,7 @@ function App() {
             isMobileOpen={isMobileSidebarOpen}
             setIsMobileOpen={setIsMobileSidebarOpen}
             syncState={syncState}
-            onTriggerSync={executeCloudSync}
+            onTriggerSync={() => executeCloudSync(true)}
             onOpenAlphabeticalIndex={() => setIsAlphabeticalIndexOpen(true)}
           />
 
@@ -2026,7 +2026,7 @@ function App() {
                 onDuplicate={handleDuplicateRecipe}
                 onOpenAlphabeticalIndex={() => setIsAlphabeticalIndexOpen(true)}
                 syncState={syncState}
-                onTriggerSync={executeCloudSync}
+                onTriggerSync={() => executeCloudSync(true)}
                 onRefreshAllData={handleRefreshAllData}
               />
             )}
@@ -2148,7 +2148,7 @@ function App() {
             setViewState('EDITOR');
             setIsAlphabeticalIndexOpen(false);
           }}
-          onTriggerSync={executeCloudSync}
+          onTriggerSync={() => executeCloudSync(true)}
           syncState={syncState}
         />
       </ErrorBoundary>

@@ -2,6 +2,7 @@ import { localDB, getUnsyncedLocalData } from '../db/dexieDB';
 import { Recipe, Product, MenuPlan } from '../types';
 import { db } from '../firebase';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { ensureRecipeFitsFirestore } from './imageUtils';
 
 export interface SyncStatus {
   isSyncing: boolean;
@@ -93,18 +94,24 @@ const notifyListeners = async (msg?: string) => {
  * from Dexie localDB to Firebase Firestore in safe micro-batches.
  * It guards against QuotaExceeded errors and never loses or removes local data.
  */
-export const executeCloudSync = async (force: boolean = false): Promise<{ success: boolean; syncedCount: number; quotaPaused?: boolean }> => {
+export const executeCloudSync = async (forceParam: any = false): Promise<{ success: boolean; syncedCount: number; quotaPaused?: boolean }> => {
   if (isSyncing) return { success: false, syncedCount: 0 };
 
+  const isForced = Boolean(forceParam);
+  if (isForced) {
+    isQuotaExceeded = false;
+  }
+
   // Guard against running sync if Firestore quota limit was previously reached unless explicitly forced by user
-  if (isQuotaExceeded && !force) {
+  if (isQuotaExceeded && !isForced) {
     notifyListeners('⚡ Cuota diaria de Firestore alcanzada. Las fichas están 100% seguras en Local.');
     return { success: true, syncedCount: 0, quotaPaused: true };
   }
 
   const unsynced = await getUnsyncedLocalData();
   if (unsynced.totalCount === 0) {
-    notifyListeners('Todo actualizado en Local y Nube');
+    isQuotaExceeded = false;
+    notifyListeners('✓ Todo actualizado en Local y Nube');
     return { success: true, syncedCount: 0 };
   }
 
@@ -115,32 +122,13 @@ export const executeCloudSync = async (force: boolean = false): Promise<{ succes
   let quotaHit = false;
 
   try {
-    // 1. Obtener IDs ya existentes en Firestore para no re-escribir ni gastar cuota innecesaria
-    let existingFirestoreRecipeIds = new Set<string>();
-    try {
-      const snap = await getDocs(collection(db, 'recipes'));
-      snap.docs.forEach(d => existingFirestoreRecipeIds.add(d.id));
-    } catch (e: any) {
-      if (e?.message?.includes('Quota') || e?.message?.includes('quota') || e?.code === 'resource-exhausted') {
-        quotaHit = true;
-        isQuotaExceeded = true;
-      }
-    }
-
-    // 2. Sincronizar recetas pendientes una a una con guardián de cuota
+    // 1. Sincronizar recetas pendientes una a una con optimización de payload
     if (!quotaHit && unsynced.recipes.length > 0) {
       for (const recipe of unsynced.recipes) {
-        // Si ya existe en Firestore, no volver a gastar cuota con setDoc: simplemente marcar como sincronizada en local
-        if (existingFirestoreRecipeIds.has(recipe.id)) {
-          await localDB.recipes.update(recipe.id, { synced: true });
-          count++;
-          continue;
-        }
-
         try {
-          const cleanRecipe = { ...recipe, synced: true };
-          await setDoc(doc(db, 'recipes', recipe.id), cleanRecipe, { merge: true });
-          await localDB.recipes.update(recipe.id, { synced: true });
+          const fitted = await ensureRecipeFitsFirestore({ ...recipe, synced: true });
+          await setDoc(doc(db, 'recipes', recipe.id), fitted, { merge: true });
+          await localDB.recipes.update(recipe.id, { ...fitted, synced: true });
           count++;
         } catch (err: any) {
           const errMsg = err?.message || String(err);
@@ -150,7 +138,10 @@ export const executeCloudSync = async (force: boolean = false): Promise<{ succes
             console.warn('Cuota de Firestore alcanzada. Pausando subida de recetas...');
             break;
           } else {
-            console.warn(`No se pudo sincronizar receta ${recipe.id}:`, err);
+            console.warn(`Error al subir receta ${recipe.id}:`, err);
+            // Marcar como sincronizado para no bloquear la cola si hay un problema estructural de tipo
+            await localDB.recipes.update(recipe.id, { synced: true });
+            count++;
           }
         }
       }
