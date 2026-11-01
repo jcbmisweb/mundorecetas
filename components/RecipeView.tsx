@@ -36,6 +36,8 @@ import {
   Download,
   Check,
   ArrowRight,
+  Plus,
+  Minus,
 } from "lucide-react";
 
 import { CategoryStripe } from "./CategoryStripe";
@@ -276,171 +278,222 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
         }}
       />
       <title>{recipe.name}</title>
-      <div className="max-w-4xl mx-auto mb-4 flex justify-between items-center no-print">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors uppercase text-[10px] tracking-widest"
-        >
-          <ArrowLeft size={18} />
-          <span>Volver al Panel</span>
-        </button>
-        <div className="flex items-center gap-3">
-          {/* Selector de Modo de Impresión / Visualización */}
-          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm no-print">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 pr-1">
-              Ficha:
-            </span>
+      {/* Layout de 2 Columnas con Panel de Control Lateral */}
+      <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row gap-6 items-start">
+        {/* PANEL LATERAL DE CONTROL Y ACCIONES (no-print) */}
+        <aside className="w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:sticky lg:top-4 no-print space-y-4">
+          
+          {/* Bloque 1: Acciones Principales */}
+          <div className="space-y-2">
             <button
               type="button"
-              onClick={() => setViewMode("complete")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${
-                viewMode === "complete"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-              title="Ficha técnica completa integral con escandallo detallado y procesos paso a paso"
+              onClick={onBack}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold uppercase text-[10px] tracking-wider transition-all"
             >
-              📋 Completa
+              <ArrowLeft size={16} />
+              <span>Volver al Panel</span>
             </button>
+
+            {/* BOTÓN SOLICITADO: MODIFICAR / EDITAR FICHA */}
             <button
               type="button"
-              onClick={() => setViewMode("minimal")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${
-                viewMode === "minimal"
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-              title="Ficha visual minimalista de 1 página con infografía protagonista, ingredientes y pase"
+              onClick={() => onEdit(recipe)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black uppercase text-xs tracking-wider rounded-xl shadow-md hover:shadow-lg active:scale-98 transition-all group"
+              title="Abrir el editor profesional para modificar datos, ingredientes o fotografías de esta ficha"
             >
-              ⚡ Minimalista
+              <Edit2 size={16} className="group-hover:rotate-12 transition-transform" />
+              <span>Modificar Ficha</span>
             </button>
+
+            {/* BOTÓN PRINCIPAL: IMPRIMIR FICHA */}
             <button
               type="button"
-              onClick={() => setViewMode("takeaway_slip")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${
-                viewMode === "takeaway_slip"
-                  ? "bg-amber-600 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-              title="Ver e imprimir exclusivamente el encarte recortable con instrucciones de finalización y alérgenos para el cliente"
+              onClick={() => window.print()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg transition-all"
             >
-              ✂ Encarte Cliente {recipe.takeAwayDetails?.isTakeAway ? "🥡" : ""}
+              <Printer size={18} fill="currentColor" className="opacity-90" />
+              <span>Imprimir Ficha</span>
             </button>
           </div>
 
-          {onDuplicate && (
-            <button
-              type="button"
-              onClick={() => onDuplicate(recipe)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black uppercase transition-all shadow-sm no-print"
-              title="Duplicar esta receta para crear una nueva variante (ej. cambiar a Eventos, Take Away, Pastelería, etc.)"
-            >
-              <Copy size={14} /> Duplicar Ficha
-            </button>
-          )}
+          <hr className="border-slate-100" />
 
-          {/* Selector de Inclusión de Análisis Molecular en Impresión (por defecto sí) */}
-          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm no-print">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2 pr-1">
-              Análisis:
-            </span>
-            <button
-              type="button"
-              onClick={() => setIncludeAnalysis(true)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${
-                includeAnalysis
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-              title="Incluir el análisis molecular y organoléptico (FlavorDB) al imprimir la ficha técnica"
-            >
-              ✓ Sí
-            </button>
-            <button
-              type="button"
-              onClick={() => setIncludeAnalysis(false)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${
-                !includeAnalysis
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-              title="Omitir el análisis molecular al imprimir"
-            >
-              ✕ No
-            </button>
+          {/* Bloque 2: Modo de Ficha */}
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+              Modo de Ficha:
+            </label>
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => setViewMode("complete")}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  viewMode === "complete"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200"
+                }`}
+                title="Ficha técnica completa integral con escandallo detallado y procesos paso a paso"
+              >
+                <span>📋</span>
+                <span className="flex-1 text-left">Ficha Completa</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode("minimal")}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  viewMode === "minimal"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200"
+                }`}
+                title="Ficha visual minimalista de 1 página con infografía protagonista, ingredientes y pase"
+              >
+                <span>⚡</span>
+                <span className="flex-1 text-left">Minimalista (1 Pág.)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode("takeaway_slip")}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  viewMode === "takeaway_slip"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200"
+                }`}
+                title="Ver e imprimir exclusivamente el encarte recortable con instrucciones para el cliente"
+              >
+                <span>✂️</span>
+                <span className="flex-1 text-left">
+                  Encarte Cliente {recipe.takeAwayDetails?.isTakeAway ? "🥡" : ""}
+                </span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-            <Users size={16} className="text-indigo-500" />
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Escalar Pax:
-            </span>
-            <input
-              type="number"
-              value={dynamicPax}
-              onChange={(e) =>
-                setDynamicPax(Math.max(1, Number(e.target.value)))
-              }
-              className="w-10 font-black text-center text-indigo-600 outline-none border-b-2 border-indigo-100 focus:border-indigo-500 bg-transparent"
-            />
+          <hr className="border-slate-100" />
+
+          {/* Bloque 3: Escalar Raciones y Análisis */}
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">
+                Escalar Raciones (Pax):
+              </label>
+              <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setDynamicPax(Math.max(1, dynamicPax - 1))}
+                  className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 hover:bg-slate-100 active:scale-95 transition-all shrink-0"
+                  title="Disminuir raciones"
+                >
+                  <Minus size={14} />
+                </button>
+                <input
+                  type="number"
+                  min="1"
+                  value={dynamicPax}
+                  onChange={(e) => setDynamicPax(Math.max(1, Number(e.target.value)))}
+                  className="w-full text-center font-black text-indigo-700 text-base bg-transparent outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setDynamicPax(dynamicPax + 1)}
+                  className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 hover:bg-slate-100 active:scale-95 transition-all shrink-0"
+                  title="Aumentar raciones"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">
+                Análisis Molecular (Impresión):
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIncludeAnalysis(true)}
+                  className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    includeAnalysis
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                  title="Incluir el análisis molecular organoléptico (FlavorDB) al imprimir"
+                >
+                  ✓ Sí
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIncludeAnalysis(false)}
+                  className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    !includeAnalysis
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                  title="Omitir el análisis molecular al imprimir"
+                >
+                  ✕ No
+                </button>
+              </div>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowPromptModal(true)}
-            className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shadow-xs group border ${
-              recipe.takeAwayDetails?.isTakeAway
-                ? "bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 text-amber-950 border-amber-300"
-                : "bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 text-indigo-900 border-indigo-200"
-            }`}
-            title={
-              recipe.takeAwayDetails?.isTakeAway
-                ? "Ver y copiar prompt profesional adaptado para Take Away (dentro de recipientes y packaging) para generar la lámina con IA"
-                : "Ver y copiar prompt profesional adaptado para generar la lámina doble 16:9 con IA"
-            }
-          >
-            {recipe.takeAwayDetails?.isTakeAway ? (
-              <Box
-                size={14}
-                className="text-amber-600 group-hover:scale-125 transition-transform"
-              />
-            ) : (
-              <Sparkles
-                size={14}
-                className="text-indigo-600 group-hover:scale-125 transition-transform"
-              />
+          <hr className="border-slate-100" />
+
+          {/* Bloque 4: Herramientas Adicionales & IA */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+              Herramientas de Receta:
+            </label>
+
+            {onDuplicate && (
+              <button
+                type="button"
+                onClick={() => onDuplicate(recipe)}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all"
+                title="Duplicar esta receta para crear una variante"
+              >
+                <Copy size={14} />
+                <span>Duplicar Ficha</span>
+              </button>
             )}
-            <span>
-              {recipe.takeAwayDetails?.isTakeAway
-                ? "Prompt IA (Take Away)"
-                : "Prompt IA"}
-            </span>
-          </button>
 
-          {onUpgradeToPro && (
             <button
               type="button"
-              onClick={() => onUpgradeToPro(recipe)}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-amber-50 to-amber-100 hover:from-amber-100 hover:to-amber-200 text-amber-950 border border-amber-300 px-3.5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shadow-xs group"
-              title="Llevar esta receta al Taller I+D Profesional (5 niveles Michelin)"
+              onClick={() => setShowPromptModal(true)}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                recipe.takeAwayDetails?.isTakeAway
+                  ? "bg-amber-50 hover:bg-amber-100 text-amber-950 border-amber-300"
+                  : "bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200"
+              }`}
+              title="Ver y copiar prompt profesional para generar la lámina con IA"
             >
-              <Compass
-                size={14}
-                className="text-amber-700 group-hover:rotate-45 transition-transform"
-              />
-              <span>Taller I+D</span>
+              {recipe.takeAwayDetails?.isTakeAway ? (
+                <Box size={14} className="text-amber-600 shrink-0" />
+              ) : (
+                <Sparkles size={14} className="text-indigo-600 shrink-0" />
+              )}
+              <span className="truncate">
+                {recipe.takeAwayDetails?.isTakeAway ? "Prompt IA (Take Away)" : "Prompt IA lámina 16:9"}
+              </span>
             </button>
-          )}
 
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 bg-slate-900 text-white px-6 py-2.5 rounded-xl hover:bg-slate-800 transition-all shadow-lg font-black uppercase text-xs tracking-widest"
-          >
-            <Printer size={18} />
-            <span>Imprimir Ficha</span>
-          </button>
-        </div>
-      </div>
+            {onUpgradeToPro && (
+              <button
+                type="button"
+                onClick={() => onUpgradeToPro(recipe)}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-amber-50 to-amber-100 hover:from-amber-100 text-amber-950 border border-amber-300 rounded-xl text-xs font-bold transition-all"
+                title="Llevar esta receta al Taller I+D Profesional (5 niveles Michelin)"
+              >
+                <Compass size={14} className="text-amber-700 shrink-0" />
+                <span>Taller I+D Michelin</span>
+              </button>
+            )}
+          </div>
+        </aside>
+
+        {/* ÁREA PRINCIPAL DE FICHA / DOCUMENTO */}
+        <main className="flex-1 w-full min-w-0">
 
       {/* Renderizado de Encarte Recortable para el Cliente */}
       {(() => null)()}
@@ -1730,6 +1783,8 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
           </div>
         </div>
       )}
+        </main>
+      </div>
 
       {/* Modal Generador de Prompt para Lámina Doble IA */}
       <ImagePromptModal
