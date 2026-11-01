@@ -59,7 +59,7 @@ import { ShieldAlert, LogOut, Loader2, Server, CheckCircle2, AlertCircle, Refres
 import { normalizeText, extractDifferenceNote } from './lib/productUtils';
 import { calculateIngredientCost } from './lib/costUtils';
 import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal, seedLocalDatabase } from './db/dexieDB';
-import { subscribeSyncStatus, executeCloudSync, startAutoSync, checkBatchSyncThreshold } from './lib/syncManager';
+import { subscribeSyncStatus, executeCloudSync, startAutoSync, checkBatchSyncThreshold, getIsQuotaExceeded, setIsQuotaExceeded } from './lib/syncManager';
 import { initGoogleDriveAuth } from './lib/googleDriveService';
 import { parseRecipesFromCSV, parseProductsFromCSV } from './lib/csvParser';
 import { separateRecipesAndProducts, executeDatabaseSeparation, isRecipeRawProduct } from './lib/recipeProductSeparator';
@@ -891,55 +891,66 @@ function App() {
       const currentUid = user?.id || appUser?.uid || 'user_admin';
       const userWorkspace = appUser?.workspaceId || currentUid;
 
-      const recipeToSave = JSON.parse(JSON.stringify({
+      const recipeToSave: Recipe = {
         ...recipe,
         workspaceId: recipe.workspaceId || userWorkspace,
         isPublic: recipe.isPublic || false,
         creator: appUser?.teacherName || appUser?.displayName || recipe.creator || settings.teacherName || 'Profesor',
         creatorLogo: appUser?.teacherLogo || recipe.creatorLogo || '',
-        lastModified: Date.now()
-      }));
+        lastModified: Date.now(),
+        synced: false
+      };
 
-      const safeRecipe = await ensureRecipeFitsFirestore(recipeToSave);
-      appendRecipeHistory(safeRecipe);
-
-      // 1. PRIMERO: Guardar en Dexie IndexedDB local de inmediato (Local-First instantáneo)
-      await saveRecipeLocal(safeRecipe, false);
-
-      // 2. Limpiar borrador de emergencia si existía
-      removeEmergencyDraft(safeRecipe.id);
-
-      // 3. Actualizar estado de React y memoria caché de inmediato (0ms de espera)
+      // 1. PASO 1 (INSTANTÁNEO, 0ms): Actualizar estado de React y caché de inmediato
       setRecipes(prev => {
-        const next = [{ ...safeRecipe, synced: false }, ...prev.filter(r => r.id !== safeRecipe.id)];
+        const next = [recipeToSave, ...prev.filter(r => r.id !== recipeToSave.id)];
         try {
-          localStorage.setItem('cached_recipes', JSON.stringify(next));
+          localStorage.setItem('cached_recipes', JSON.stringify(next.slice(0, 50)));
         } catch (e) {}
         return next;
       });
 
-      // 4. Redirigir de inmediato al Dashboard sin esperar a la nube
+      // 2. PASO 2 (INSTANTÁNEO): Limpiar borrador de emergencia
+      removeEmergencyDraft(recipeToSave.id);
+
+      // 3. PASO 3 (INSTANTÁNEO): Redirigir de inmediato al Dashboard
       if (redirect) {
         setViewState('DASHBOARD');
         setCurrentRecipe(null);
       }
 
-      // 5. DESPUÉS: Sincronización en segundo plano con Firebase Firestore (No bloqueante, con timeout)
+      // 4. PASO 4 (SEGUNDO PLANO): Guardar en Dexie y Firebase sin bloquear la navegación
       (async () => {
-        if (!navigator.onLine) return;
         try {
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout de sincronización Firebase')), 12000)
-          );
-          await Promise.race([
-            setDoc(doc(db, 'recipes', safeRecipe.id), safeRecipe, { merge: true }),
-            timeoutPromise
-          ]);
-          // Si sube con éxito, marcar como sincronizada en Dexie y en la interfaz
-          await saveRecipeLocal(safeRecipe, true);
-          setRecipes(prev => prev.map(r => r.id === safeRecipe.id ? { ...r, synced: true } : r));
-        } catch (e) {
-          console.warn('Receta guardada en local. La sincronización con Firebase se completará en segundo plano:', e);
+          await saveRecipeLocal(recipeToSave, false);
+          appendRecipeHistory(recipeToSave);
+
+          const safeRecipe = await ensureRecipeFitsFirestore(recipeToSave);
+
+          // Si la cuota diaria gratuita de Firestore está agotada, no forzar llamada para evitar bloqueos
+          if (navigator.onLine && !getIsQuotaExceeded()) {
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout de sincronización Firebase')), 10000)
+            );
+            try {
+              await Promise.race([
+                setDoc(doc(db, 'recipes', safeRecipe.id), safeRecipe, { merge: true }),
+                timeoutPromise
+              ]);
+              await saveRecipeLocal(safeRecipe, true);
+              setRecipes(prev => prev.map(r => r.id === safeRecipe.id ? { ...r, synced: true } : r));
+            } catch (syncErr: any) {
+              const msg = syncErr?.message || String(syncErr);
+              if (msg.includes('Quota') || msg.includes('quota') || syncErr?.code === 'resource-exhausted') {
+                console.warn('⚡ Límite de cuota diaria de Firestore alcanzado. La receta queda guardada en Local.');
+                setIsQuotaExceeded(true);
+              } else {
+                console.warn('La sincronización con Firebase se completará en segundo plano:', syncErr);
+              }
+            }
+          }
+        } catch (bgError) {
+          console.warn('La sincronización con Firebase se completará en segundo plano:', bgError);
         }
       })();
 
@@ -947,11 +958,7 @@ function App() {
       checkBatchSyncThreshold(5);
     } catch (err: any) {
       console.error("Error al guardar receta:", err);
-      try {
-        await saveRecipeLocal(recipe, false);
-        setRecipes(prev => [{ ...recipe, synced: false }, ...prev.filter(r => r.id !== recipe.id)]);
-      } catch {}
-      alert(`✅ Receta guardada con éxito en la memoria local de este equipo.`);
+      setRecipes(prev => [{ ...recipe, synced: false }, ...prev.filter(r => r.id !== recipe.id)]);
       if (redirect) {
         setViewState('DASHBOARD');
         setCurrentRecipe(null);

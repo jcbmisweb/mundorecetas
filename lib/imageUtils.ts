@@ -148,64 +148,89 @@ export const getEstimatedObjectSizeBytes = (obj: any): number => {
  * Optimizes photos in parallel for instant execution without hanging.
  */
 export const ensureRecipeFitsFirestore = async (recipe: any): Promise<any> => {
-  const cloned = JSON.parse(JSON.stringify(recipe));
-  
-  const promises: Promise<void>[] = [];
-
-  // Step 1: Compress main photo if it's base64
-  if (cloned.photo && typeof cloned.photo === 'string' && cloned.photo.startsWith('data:image')) {
-    promises.push(
-      compressBase64Image(cloned.photo, 1200, 0.78).then(res => { cloned.photo = res; })
+  if (!recipe) return recipe;
+  try {
+    const timeoutPromise = new Promise<any>((resolve) => 
+      setTimeout(() => resolve(recipe), 2500)
     );
-  }
 
-  // Step 2: Compress subrecipe photos in PARALLEL
-  if (Array.isArray(cloned.subRecipes)) {
-    cloned.subRecipes.forEach((sub: any) => {
-      if (Array.isArray(sub.photos)) {
-        sub.photos.forEach((pUrl: any, pIdx: number) => {
-          if (typeof pUrl === 'string' && pUrl.startsWith('data:image')) {
-            promises.push(
-              compressBase64Image(pUrl, 800, 0.7).then(res => { sub.photos[pIdx] = res; })
-            );
+    const processPromise = (async () => {
+      const cloned = JSON.parse(JSON.stringify(recipe));
+      const promises: Promise<void>[] = [];
+
+      // Step 1: Compress main photo if it's base64
+      if (cloned.photo && typeof cloned.photo === 'string' && cloned.photo.startsWith('data:image')) {
+        promises.push(
+          compressBase64Image(cloned.photo, 1200, 0.78).then(res => { cloned.photo = res; }).catch(() => {})
+        );
+      }
+
+      // Step 1b: Compress pastry infographic if it's base64
+      if (cloned.pastryInfographic && typeof cloned.pastryInfographic === 'string' && cloned.pastryInfographic.startsWith('data:image')) {
+        promises.push(
+          compressBase64Image(cloned.pastryInfographic, 1200, 0.78).then(res => { cloned.pastryInfographic = res; }).catch(() => {})
+        );
+      }
+
+      // Step 2: Compress subrecipe photos in PARALLEL
+      if (Array.isArray(cloned.subRecipes)) {
+        cloned.subRecipes.forEach((sub: any) => {
+          if (Array.isArray(sub.photos)) {
+            sub.photos.forEach((pUrl: any, pIdx: number) => {
+              if (typeof pUrl === 'string' && pUrl.startsWith('data:image')) {
+                promises.push(
+                  compressBase64Image(pUrl, 800, 0.7).then(res => { sub.photos[pIdx] = res; }).catch(() => {})
+                );
+              }
+            });
           }
         });
       }
-    });
-  }
 
-  if (promises.length > 0) {
-    await Promise.all(promises);
-  }
+      if (promises.length > 0) {
+        await Promise.all(promises);
+      }
 
-  // Step 3: Check total size. If still > 800KB, apply aggressive compression in PARALLEL
-  let size = getEstimatedObjectSizeBytes(cloned);
-  if (size > 800000) {
-    const secondPassPromises: Promise<void>[] = [];
-    if (cloned.photo && typeof cloned.photo === 'string' && cloned.photo.startsWith('data:image')) {
-      secondPassPromises.push(
-        compressBase64Image(cloned.photo, 900, 0.6).then(res => { cloned.photo = res; })
-      );
-    }
-    if (Array.isArray(cloned.subRecipes)) {
-      cloned.subRecipes.forEach((sub: any) => {
-        if (Array.isArray(sub.photos)) {
-          sub.photos.forEach((pUrl: any, pIdx: number) => {
-            if (typeof pUrl === 'string' && pUrl.startsWith('data:image')) {
-              secondPassPromises.push(
-                compressBase64Image(pUrl, 600, 0.55).then(res => { sub.photos[pIdx] = res; })
-              );
+      // Step 3: Check total size. If still > 800KB, apply aggressive compression in PARALLEL
+      let size = getEstimatedObjectSizeBytes(cloned);
+      if (size > 800000) {
+        const secondPassPromises: Promise<void>[] = [];
+        if (cloned.photo && typeof cloned.photo === 'string' && cloned.photo.startsWith('data:image')) {
+          secondPassPromises.push(
+            compressBase64Image(cloned.photo, 900, 0.6).then(res => { cloned.photo = res; }).catch(() => {})
+          );
+        }
+        if (cloned.pastryInfographic && typeof cloned.pastryInfographic === 'string' && cloned.pastryInfographic.startsWith('data:image')) {
+          secondPassPromises.push(
+            compressBase64Image(cloned.pastryInfographic, 900, 0.6).then(res => { cloned.pastryInfographic = res; }).catch(() => {})
+          );
+        }
+        if (Array.isArray(cloned.subRecipes)) {
+          cloned.subRecipes.forEach((sub: any) => {
+            if (Array.isArray(sub.photos)) {
+              sub.photos.forEach((pUrl: any, pIdx: number) => {
+                if (typeof pUrl === 'string' && pUrl.startsWith('data:image')) {
+                  secondPassPromises.push(
+                    compressBase64Image(pUrl, 600, 0.55).then(res => { sub.photos[pIdx] = res; }).catch(() => {})
+                  );
+                }
+              });
             }
           });
         }
-      });
-    }
-    if (secondPassPromises.length > 0) {
-      await Promise.all(secondPassPromises);
-    }
-  }
+        if (secondPassPromises.length > 0) {
+          await Promise.all(secondPassPromises);
+        }
+      }
 
-  return cloned;
+      return cloned;
+    })();
+
+    return await Promise.race([processPromise, timeoutPromise]);
+  } catch (err) {
+    console.warn("ensureRecipeFitsFirestore skipped due to error:", err);
+    return recipe;
+  }
 };
 
 // ==========================================

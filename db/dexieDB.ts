@@ -19,7 +19,7 @@ export class GastronomyLocalDB extends Dexie {
 export const localDB = new GastronomyLocalDB();
 
 /**
- * Saves a recipe into IndexedDB locally with sync flag.
+ * Saves a recipe into IndexedDB locally with sync flag and timeout protection.
  */
 export const saveRecipeLocal = async (recipe: Recipe, isSynced: boolean = false): Promise<void> => {
   const itemToSave: Recipe = {
@@ -27,11 +27,21 @@ export const saveRecipeLocal = async (recipe: Recipe, isSynced: boolean = false)
     lastModified: recipe.lastModified || Date.now(),
     synced: isSynced
   };
-  await localDB.recipes.put(itemToSave);
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('IndexedDB put timeout')), 3000)
+    );
+    await Promise.race([
+      localDB.recipes.put(itemToSave),
+      timeoutPromise
+    ]);
+  } catch (err) {
+    console.warn("Could not save recipe to Dexie:", err);
+  }
 };
 
 /**
- * Saves a product into IndexedDB locally with sync flag.
+ * Saves a product into IndexedDB locally with sync flag and timeout protection.
  */
 export const saveProductLocal = async (product: Product, isSynced: boolean = false): Promise<void> => {
   const itemToSave: Product = {
@@ -39,18 +49,38 @@ export const saveProductLocal = async (product: Product, isSynced: boolean = fal
     lastModified: product.lastModified || Date.now(),
     synced: isSynced
   };
-  await localDB.products.put(itemToSave);
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('IndexedDB put timeout')), 3000)
+    );
+    await Promise.race([
+      localDB.products.put(itemToSave),
+      timeoutPromise
+    ]);
+  } catch (err) {
+    console.warn("Could not save product to Dexie:", err);
+  }
 };
 
 /**
- * Saves a menu plan into IndexedDB locally with sync flag.
+ * Saves a menu plan into IndexedDB locally with sync flag and timeout protection.
  */
 export const saveMenuPlanLocal = async (plan: MenuPlan, isSynced: boolean = false): Promise<void> => {
   const itemToSave: MenuPlan = {
     ...plan,
     synced: isSynced
   };
-  await localDB.menuPlans.put(itemToSave);
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('IndexedDB put timeout')), 3000)
+    );
+    await Promise.race([
+      localDB.menuPlans.put(itemToSave),
+      timeoutPromise
+    ]);
+  } catch (err) {
+    console.warn("Could not save menu plan to Dexie:", err);
+  }
 };
 
 export const getStorageBreakdown = async () => {
