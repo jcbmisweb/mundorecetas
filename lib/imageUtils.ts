@@ -93,7 +93,7 @@ export const compressBase64Image = async (dataUrl: string, maxDim = 1200, qualit
 
     const timer = setTimeout(() => {
       safeResolve(dataUrl);
-    }, 2500);
+    }, 800);
 
     try {
       const img = new Image();
@@ -145,45 +145,63 @@ export const getEstimatedObjectSizeBytes = (obj: any): number => {
 
 /**
  * Guarantees that a Recipe document will stay strictly below Firestore's 1,048,576 bytes (1 MiB) limit.
- * If total document size > 800KB, it compresses photos in steps until safe.
+ * Optimizes photos in parallel for instant execution without hanging.
  */
 export const ensureRecipeFitsFirestore = async (recipe: any): Promise<any> => {
   const cloned = JSON.parse(JSON.stringify(recipe));
   
+  const promises: Promise<void>[] = [];
+
   // Step 1: Compress main photo if it's base64
   if (cloned.photo && typeof cloned.photo === 'string' && cloned.photo.startsWith('data:image')) {
-    cloned.photo = await compressBase64Image(cloned.photo, 1200, 0.78);
+    promises.push(
+      compressBase64Image(cloned.photo, 1200, 0.78).then(res => { cloned.photo = res; })
+    );
   }
 
-  // Step 2: Compress subrecipe photos
+  // Step 2: Compress subrecipe photos in PARALLEL
   if (Array.isArray(cloned.subRecipes)) {
-    for (const sub of cloned.subRecipes) {
+    cloned.subRecipes.forEach((sub: any) => {
       if (Array.isArray(sub.photos)) {
-        for (let p = 0; p < sub.photos.length; p++) {
-          if (typeof sub.photos[p] === 'string' && sub.photos[p].startsWith('data:image')) {
-            sub.photos[p] = await compressBase64Image(sub.photos[p], 800, 0.7);
+        sub.photos.forEach((pUrl: any, pIdx: number) => {
+          if (typeof pUrl === 'string' && pUrl.startsWith('data:image')) {
+            promises.push(
+              compressBase64Image(pUrl, 800, 0.7).then(res => { sub.photos[pIdx] = res; })
+            );
           }
-        }
+        });
       }
-    }
+    });
   }
 
-  // Step 3: Check total size. If still > 800KB, apply aggressive compression
+  if (promises.length > 0) {
+    await Promise.all(promises);
+  }
+
+  // Step 3: Check total size. If still > 800KB, apply aggressive compression in PARALLEL
   let size = getEstimatedObjectSizeBytes(cloned);
   if (size > 800000) {
+    const secondPassPromises: Promise<void>[] = [];
     if (cloned.photo && typeof cloned.photo === 'string' && cloned.photo.startsWith('data:image')) {
-      cloned.photo = await compressBase64Image(cloned.photo, 900, 0.6);
+      secondPassPromises.push(
+        compressBase64Image(cloned.photo, 900, 0.6).then(res => { cloned.photo = res; })
+      );
     }
     if (Array.isArray(cloned.subRecipes)) {
-      for (const sub of cloned.subRecipes) {
+      cloned.subRecipes.forEach((sub: any) => {
         if (Array.isArray(sub.photos)) {
-          for (let p = 0; p < sub.photos.length; p++) {
-            if (typeof sub.photos[p] === 'string' && sub.photos[p].startsWith('data:image')) {
-              sub.photos[p] = await compressBase64Image(sub.photos[p], 600, 0.55);
+          sub.photos.forEach((pUrl: any, pIdx: number) => {
+            if (typeof pUrl === 'string' && pUrl.startsWith('data:image')) {
+              secondPassPromises.push(
+                compressBase64Image(pUrl, 600, 0.55).then(res => { sub.photos[pIdx] = res; })
+              );
             }
-          }
+          });
         }
-      }
+      });
+    }
+    if (secondPassPromises.length > 0) {
+      await Promise.all(secondPassPromises);
     }
   }
 

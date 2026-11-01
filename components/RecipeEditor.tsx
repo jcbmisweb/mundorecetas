@@ -117,6 +117,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   const [familySearch, setFamilySearch] = useState('');
   const [showFamilyList, setShowFamilyList] = useState(false);
   const [linkedRecipeSearch, setLinkedRecipeSearch] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const filteredAndSortedRecipesForLinking = useMemo(() => {
     if (!allRecipes) return [];
@@ -510,12 +511,14 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     const totalCost = subRecipes.reduce((acc, sub) => acc + sub.ingredients.reduce((sAcc, ing) => sAcc + (ing.cost || 0), 0), 0);
     const mainVideoUrl = recipeVideos.length > 0 ? recipeVideos[0].url : sourceUrl;
     try {
       await onSave({
         id: initialRecipe?.id || Date.now().toString(),
-        name, 
+        name: name.trim() || 'Receta sin título', 
         categories: categories.length > 0 ? categories : (settings.categories?.[0] ? [settings.categories[0]] : ['Otros']),
         category: categories[0] || settings.categories?.[0] || 'Otros',
         photo, 
@@ -544,8 +547,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         extraAllergens,
         linkedRecipeIds,
         lastModified: Date.now()
-      } as any); // Type assertion to bypass workspaceId which is added in App.tsx
-      alert(`Ficha técnica "${name}" guardada correctamente.`);
+      } as any);
     } catch (error: any) {
       console.error("Error saving recipe:", error);
       let errorMsg = "Es posible que el tamaño de las imágenes sea demasiado grande o haya un problema de conexión.";
@@ -556,13 +558,14 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         if (error.message) errorMsg = error.message;
       }
       
-      // Check approximate payload size
       const payloadSize = JSON.stringify(subRecipes).length;
       if (payloadSize > 800000) {
         errorMsg = "El tamaño de las imágenes es demasiado grande para la base de datos. Por favor, elimina algunas fotos o usa imágenes más pequeñas.";
       }
 
       alert(`Hubo un error al guardar la ficha técnica.\n\nDetalle: ${errorMsg}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -578,8 +581,25 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           </h2>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleSave} className="px-8 py-3 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 flex items-center gap-2 shadow-xl font-black uppercase text-xs tracking-widest transition-all">
-            <Save size={18} /> Guardar Ficha
+          <button 
+            type="button"
+            onClick={handleSave} 
+            disabled={isSaving}
+            className={`px-8 py-3 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 flex items-center gap-2 shadow-xl font-black uppercase text-xs tracking-widest transition-all ${
+              isSaving ? 'opacity-70 cursor-not-allowed' : ''
+            }`}
+          >
+            {isSaving ? (
+              <>
+                <RefreshCw size={18} className="animate-spin text-amber-400" />
+                <span>Guardando Ficha...</span>
+              </>
+            ) : (
+              <>
+                <Save size={18} />
+                <span>Guardar Ficha</span>
+              </>
+            )}
           </button>
         </div>
       </div>
