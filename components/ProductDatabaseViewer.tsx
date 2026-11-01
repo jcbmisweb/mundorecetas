@@ -727,7 +727,14 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
                     </div>
                   </td>
                   <td className="px-6 py-4 font-mono font-bold text-indigo-600">
-                    {product.pricePerUnit === 0 ? <span className="text-[10px] text-slate-300">N/D</span> : `${product.pricePerUnit.toFixed(3).replace('.', ',')}€`}
+                    {(() => {
+                      const numPrice = parseSmartPrice(product.pricePerUnit);
+                      return numPrice <= 0 ? (
+                        <span className="text-[10px] text-slate-300">N/D</span>
+                      ) : (
+                        `${numPrice.toFixed(3).replace('.', ',')}€`
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 text-slate-400 font-black uppercase text-[10px]">{product.unit}</td>
                   <td className="px-6 py-4">
@@ -924,7 +931,12 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
                     Coste real limpio (con {editingProduct.wastePercentage}% merma):
                   </span>
                   <span className="font-mono font-black text-emerald-700 text-sm">
-                    {(parseSmartPrice(editingProduct.pricePerUnit) / (1 - (editingProduct.wastePercentage / 100))).toFixed(3).replace('.', ',')}€/{editingProduct.unit}
+                    {(() => {
+                      const waste = editingProduct.wastePercentage || 0;
+                      const factor = Math.max(0.01, 1 - (waste / 100));
+                      const cleanCost = parseSmartPrice(editingProduct.pricePerUnit) / factor;
+                      return `${cleanCost.toFixed(3).replace('.', ',')}€/${editingProduct.unit}`;
+                    })()}
                   </span>
                 </div>
               )}
