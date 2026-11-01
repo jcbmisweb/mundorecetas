@@ -154,6 +154,22 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
     setIsCreating(true);
   };
 
+  const openEditProduct = (product: Product) => {
+    setPendingCurrentIndex(null);
+    setEditingProduct({
+      ...product,
+      name: product.name || '',
+      category: product.category || 'VARIOS',
+      unit: product.unit || 'kg',
+      pricePerUnit: product.pricePerUnit ?? 0,
+      allergens: Array.isArray(product.allergens) ? [...product.allergens] : [],
+      supplier: product.supplier || '',
+      wastePercentage: product.wastePercentage,
+      weightPerUnit: product.weightPerUnit
+    });
+    setIsCreating(false);
+  };
+
   const filteredProducts = useMemo(() => {
     const term = searchTerm.toLowerCase();
     const isActuallyAdmin = isUserAdmin(appUser);
@@ -726,9 +742,23 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => { setEditingProduct({...product}); setIsCreating(false); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 size={16} /></button>
-                      <button onClick={() => confirm(`¿Borrar ${product.name}?`) && onDelete(product.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                    <div className="flex justify-end gap-1 opacity-100 sm:opacity-70 group-hover:opacity-100 transition-all">
+                      <button 
+                        type="button"
+                        onClick={() => openEditProduct(product)} 
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Modificar producto"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => confirm(`¿Borrar ${product.name}?`) && onDelete(product.id)} 
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Eliminar producto"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -794,11 +824,11 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
             <form onSubmit={handleSave} className="p-8 space-y-6">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Familia / Categoría de Pedido</label>
-                <input required type="text" value={editingProduct.category} onChange={e => setEditingProduct({...editingProduct, category: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900" placeholder="Ej: CARNES, LÁCTEOS..." />
+                <input required type="text" value={editingProduct.category || ''} onChange={e => setEditingProduct({...editingProduct, category: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900" placeholder="Ej: CARNES, LÁCTEOS..." />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Nombre del Producto (Sin familia)</label>
-                <input required type="text" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900" placeholder="Ej: SOLOMILLO DE TERNERA" />
+                <input required type="text" value={editingProduct.name || ''} onChange={e => setEditingProduct({...editingProduct, name: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900" placeholder="Ej: SOLOMILLO DE TERNERA" />
               </div>
 
               {isCreating && (() => {
@@ -917,51 +947,56 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
               )}
 
               {/* Control de Alérgenos Compacto y Ultra Funcional */}
-              <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-100 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
-                      Alérgenos ({editingProduct.allergens.length})
-                    </span>
-                    {editingProduct.allergens.length === 0 && (
-                      <span className="text-[8.5px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                        ✓ Sin alérgenos declarados
-                      </span>
-                    )}
-                  </div>
-                  {editingProduct.allergens.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setEditingProduct({...editingProduct, allergens: []})}
-                      className="text-[9px] font-bold text-rose-600 hover:text-rose-800 uppercase tracking-wider hover:underline"
-                    >
-                      Limpiar todos
-                    </button>
-                  )}
-                </div>
+              {(() => {
+                const currentAllergens = Array.isArray(editingProduct.allergens) ? editingProduct.allergens : [];
+                return (
+                  <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-100 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
+                          Alérgenos ({currentAllergens.length})
+                        </span>
+                        {currentAllergens.length === 0 && (
+                          <span className="text-[8.5px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                            ✓ Sin alérgenos declarados
+                          </span>
+                        )}
+                      </div>
+                      {currentAllergens.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingProduct({...editingProduct, allergens: []})}
+                          className="text-[9px] font-bold text-rose-600 hover:text-rose-800 uppercase tracking-wider hover:underline"
+                        >
+                          Limpiar todos
+                        </button>
+                      )}
+                    </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 pt-1">
-                  {ALLERGEN_LIST.map(a => {
-                    const isSel = editingProduct.allergens.includes(a);
-                    return (
-                      <button 
-                        key={a} 
-                        type="button" 
-                        onClick={() => toggleAllergen(a)} 
-                        className={`p-1.5 rounded-xl text-[8.5px] font-black border transition-all uppercase flex flex-col items-center justify-center gap-1 ${
-                          isSel 
-                            ? 'bg-rose-50 border-rose-400 text-rose-800 shadow-xs ring-1 ring-rose-300' 
-                            : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 opacity-60 hover:opacity-100'
-                        }`}
-                        title={a}
-                      >
-                        <AllergenIcon allergen={a} size={16} />
-                        <span className="truncate max-w-full text-[7.5px] tracking-tighter">{a}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                    <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 pt-1">
+                      {ALLERGEN_LIST.map(a => {
+                        const isSel = currentAllergens.includes(a);
+                        return (
+                          <button 
+                            key={a} 
+                            type="button" 
+                            onClick={() => toggleAllergen(a)} 
+                            className={`p-1.5 rounded-xl text-[8.5px] font-black border transition-all uppercase flex flex-col items-center justify-center gap-1 ${
+                              isSel 
+                                ? 'bg-rose-50 border-rose-400 text-rose-800 shadow-xs ring-1 ring-rose-300' 
+                                : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 opacity-60 hover:opacity-100'
+                            }`}
+                            title={a}
+                          >
+                            <AllergenIcon allergen={a} size={16} />
+                            <span className="truncate max-w-full text-[7.5px] tracking-tighter">{a}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Opciones directas si era un ingrediente de receta */}
               {isCreating && (

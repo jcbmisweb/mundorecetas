@@ -1933,34 +1933,36 @@ function App() {
                 onUpdateRecipe={handleSave}
               />
             ) : viewState === 'PRODUCT_DB' ? (
-              <ProductDatabaseViewer 
-                products={productDatabase} 
-                recipes={recipes}
-                appUser={appUser}
-                onBack={() => setViewState('DASHBOARD')} 
-                onAdd={handleSaveProduct} 
-                onEdit={handleSaveProduct} 
-                onDelete={handleDeleteProduct} 
-                onReplaceIngredient={handleReplaceIngredientInRecipes} 
-                onMarkInternalPrep={handleMarkIngredientAsInternalPrep} 
-                onMarkNonProduct={handleMarkIngredientAsNonProduct} 
-                onImport={async (list) => {
-                  try {
-                    setIsLoading(true);
-                    for (const p of list) {
-                      await setDoc(doc(db, 'products', p.id), p, { merge: true });
-                      await saveProductLocal(p, true);
+              <ErrorBoundary fallbackTitle="Error al cargar el Inventario Maestro" onReset={() => setViewState('DASHBOARD')}>
+                <ProductDatabaseViewer 
+                  products={productDatabase} 
+                  recipes={recipes}
+                  appUser={appUser}
+                  onBack={() => setViewState('DASHBOARD')} 
+                  onAdd={handleSaveProduct} 
+                  onEdit={handleSaveProduct} 
+                  onDelete={handleDeleteProduct} 
+                  onReplaceIngredient={handleReplaceIngredientInRecipes} 
+                  onMarkInternalPrep={handleMarkIngredientAsInternalPrep} 
+                  onMarkNonProduct={handleMarkIngredientAsNonProduct} 
+                  onImport={async (list) => {
+                    try {
+                      setIsLoading(true);
+                      for (const p of list) {
+                        await setDoc(doc(db, 'products', p.id), p, { merge: true });
+                        await saveProductLocal(p, true);
+                      }
+                      setProductDatabase(list);
+                      alert(`Importación completada: ${list.length} productos sincronizados con Firebase Firestore.`);
+                    } catch (err) {
+                      console.error("Error importing products:", err);
+                      alert("Hubo un error al sincronizar el inventario.");
+                    } finally {
+                      setIsLoading(false);
                     }
-                    setProductDatabase(list);
-                    alert(`Importación completada: ${list.length} productos sincronizados con Firebase Firestore.`);
-                  } catch (err) {
-                    console.error("Error importing products:", err);
-                    alert("Hubo un error al sincronizar el inventario.");
-                  } finally {
-                    setIsLoading(false);
-                  }
-                }} 
-              />
+                  }} 
+                />
+              </ErrorBoundary>
             ) : viewState === 'USER_MANAGEMENT' ? (
               <UserManagement recipes={recipes} onBack={() => setViewState('DASHBOARD')} />
             ) : viewState === 'PRO_WORKSHOP' ? (
