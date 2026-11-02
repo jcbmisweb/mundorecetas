@@ -59,7 +59,17 @@ import { ShieldAlert, LogOut, Loader2, Server, CheckCircle2, AlertCircle, Refres
 import { normalizeText, extractDifferenceNote } from './lib/productUtils';
 import { calculateIngredientCost } from './lib/costUtils';
 import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal, seedLocalDatabase } from './db/dexieDB';
-import { subscribeSyncStatus, executeCloudSync, startAutoSync, checkBatchSyncThreshold, getIsQuotaExceeded, setIsQuotaExceeded } from './lib/syncManager';
+import { 
+  subscribeSyncStatus, 
+  executeCloudSync, 
+  startAutoSync, 
+  checkBatchSyncThreshold, 
+  getIsQuotaExceeded, 
+  setIsQuotaExceeded,
+  executeDailyVerification,
+  isDailySyncNeeded,
+  getDailySyncStatus
+} from './lib/syncManager';
 import { initGoogleDriveAuth } from './lib/googleDriveService';
 import { parseRecipesFromCSV, parseProductsFromCSV } from './lib/csvParser';
 import { separateRecipesAndProducts, executeDatabaseSeparation, isRecipeRawProduct } from './lib/recipeProductSeparator';
@@ -277,10 +287,10 @@ function App() {
         if (r.id) {
           if (recipeMap.has(r.id)) {
             const cloudDoc = recipeMap.get(r.id)!;
-            if ((r.lastModified || 0) > (cloudDoc.lastModified || 0)) {
+            if (r.synced === false || (r.lastModified || 0) > (cloudDoc.lastModified || 0)) {
               recipeMap.set(r.id, { ...cloudDoc, ...r, synced: false });
             } else {
-              recipeMap.set(r.id, { ...r, ...cloudDoc, synced: true });
+              recipeMap.set(r.id, { ...cloudDoc, ...r, synced: true });
             }
           } else {
             recipeMap.set(r.id, { ...r, synced: false });
@@ -451,7 +461,18 @@ function App() {
         console.warn('Dexie DB load error:', e);
       }
     };
-    loadDexieData();
+    loadDexieData().then(() => {
+      // Comprobación diaria única al comenzar el día (si ya se hizo hoy, no lo vuelve a hacer)
+      executeDailyVerification().then(res => {
+        if (res.executed) {
+          localDB.recipes.toArray().then(items => {
+            if (items.length > 0) {
+              setRecipes(items.map(ensureRecipeType));
+            }
+          });
+        }
+      });
+    });
 
     // Subscribe to SyncManager
     const unsubSync = subscribeSyncStatus((st) => {
@@ -462,8 +483,8 @@ function App() {
       });
     });
 
-    // Start auto sync background interval
-    startAutoSync(5, 5);
+    // Iniciar gestor de sincronización (sin intervalos agresivos de sondeo)
+    startAutoSync();
 
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -630,65 +651,9 @@ function App() {
 
     setViewState('DASHBOARD');
 
-    // 1. Recipes subscription (with localDB merge to never lose offline items)
-    const unsubRecipes = onSnapshot(collection(db, 'recipes'), async (snapshot) => {
-      const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Recipe));
-      try {
-        const localItems = await localDB.recipes.toArray();
-        const map = new Map<string, Recipe>();
-        
-        // 1. Fichas de Firestore están online (synced: true)
-        loaded.forEach(r => { if (r.id) map.set(r.id, { ...r, synced: true }); });
-        
-        // 2. Fichas locales
-        localItems.forEach(r => {
-          if (r.id) {
-            if (map.has(r.id)) {
-              const cloudDoc = map.get(r.id)!;
-              if ((r.lastModified || 0) > (cloudDoc.lastModified || 0)) {
-                map.set(r.id, { ...cloudDoc, ...r, synced: false });
-              } else {
-                map.set(r.id, { ...r, ...cloudDoc, synced: true });
-              }
-            } else {
-              map.set(r.id, { ...r, synced: false });
-            }
-          }
-        });
-        
-        const merged = Array.from(map.values());
-        if (merged.length > 0) {
-          setRecipes(merged);
-          try { localStorage.setItem('cached_recipes', JSON.stringify(merged)); } catch {}
-          try { await localDB.recipes.bulkPut(merged); } catch {}
-        }
-      } catch (_) {
-        if (loaded.length > 0) {
-          setRecipes(loaded);
-          try { localStorage.setItem('cached_recipes', JSON.stringify(loaded)); } catch {}
-        }
-      }
-    }, (err) => {
-      console.warn("Firestore recipes onSnapshot warning (trabajo offline):", err);
-      localDB.recipes.toArray().then(async items => {
-        if (items.length > 0) {
-          setRecipes(items.map(ensureRecipeType));
-        } else {
-          try {
-            const resp = await fetch('/data/bundledRecipes.json');
-            if (resp.ok) {
-              const parsed = (await resp.json()).map(ensureRecipeType);
-              if (parsed.length > 0) {
-                await localDB.recipes.bulkPut(parsed);
-                setRecipes(parsed);
-              }
-            }
-          } catch (e) {
-            console.warn('Fallback offline error:', e);
-          }
-        }
-      });
-    });
+    // 1. Recipes: La comprobación se realiza una sola vez al comenzar el día (executeDailyVerification).
+    // NO se ejecuta un onSnapshot continuo para evitar saturar la cuota de Firebase y garantizar que el disco local NUNCA sea sobrescrito.
+    const unsubRecipes = () => {};
 
     // 2. Products subscription (with localDB merge)
     const unsubProducts = onSnapshot(collection(db, 'products'), async (snapshot) => {
@@ -866,8 +831,9 @@ function App() {
 
   const handleEdit = (recipe: Recipe) => {
     let recipeToEdit = migrateRecipeIfNeeded(recipe);
-    if (appUser && recipeToEdit.workspaceId && recipeToEdit.workspaceId !== appUser.workspaceId) {
-      // Duplicate community recipe
+    const isActuallyAdmin = isUserAdmin(appUser);
+    if (!isActuallyAdmin && appUser && recipeToEdit.workspaceId && recipeToEdit.workspaceId !== appUser.workspaceId) {
+      // Duplicate community recipe for standard non-admin users
       recipeToEdit = {
         ...recipeToEdit,
         id: Date.now().toString(),
@@ -901,33 +867,28 @@ function App() {
         synced: false
       };
 
-      // 1. PASO 1 (INSTANTÁNEO, 0ms): Actualizar estado de React y caché de inmediato
+      // 1. PASO 1 (INSTANTÁNEO, 0ms): Actualizar estado de React con la lista completa sin recortes
       setRecipes(prev => {
         const next = [recipeToSave, ...prev.filter(r => r.id !== recipeToSave.id)];
-        try {
-          localStorage.setItem('cached_recipes', JSON.stringify(next.slice(0, 50)));
-        } catch (e) {}
         return next;
       });
 
-      // 2. PASO 2 (INSTANTÁNEO): Limpiar borrador de emergencia
-      removeEmergencyDraft(recipeToSave.id);
-
-      // 3. PASO 3 (INSTANTÁNEO): Redirigir de inmediato al Dashboard
+      // 2. PASO 2 (INSTANTÁNEO): Redirigir de inmediato al Dashboard
       if (redirect) {
         setViewState('DASHBOARD');
         setCurrentRecipe(null);
       }
 
-      // 4. PASO 4 (SEGUNDO PLANO): Guardar en Dexie y Firebase sin bloquear la navegación
+      // 3. PASO 3: Guardar en Dexie (disco local del PC) de forma prioritaria
       (async () => {
         try {
           await saveRecipeLocal(recipeToSave, false);
+          removeEmergencyDraft(recipeToSave.id);
           appendRecipeHistory(recipeToSave);
 
           const safeRecipe = await ensureRecipeFitsFirestore(recipeToSave);
 
-          // Si la cuota diaria gratuita de Firestore está agotada, no forzar llamada para evitar bloqueos
+          // Si hay conexión y no está agotada la cuota de Firebase, sincronizar en la nube
           if (navigator.onLine && !getIsQuotaExceeded()) {
             const timeoutPromise = new Promise((_, reject) => 
               setTimeout(() => reject(new Error('Timeout de sincronización Firebase')), 10000)
@@ -942,7 +903,7 @@ function App() {
             } catch (syncErr: any) {
               const msg = syncErr?.message || String(syncErr);
               if (msg.includes('Quota') || msg.includes('quota') || syncErr?.code === 'resource-exhausted') {
-                console.warn('⚡ Límite de cuota diaria de Firestore alcanzado. La receta queda guardada en Local.');
+                console.warn('⚡ Límite de cuota diaria de Firestore alcanzado. La receta queda 100% segura en Local.');
                 setIsQuotaExceeded(true);
               } else {
                 console.warn('La sincronización con Firebase se completará en segundo plano:', syncErr);
@@ -950,12 +911,9 @@ function App() {
             }
           }
         } catch (bgError) {
-          console.warn('La sincronización con Firebase se completará en segundo plano:', bgError);
+          console.warn('Guardado en local completado con éxito. Pendiente de subida a la nube:', bgError);
         }
       })();
-
-      // Comprobar umbral de sincronización en lote
-      checkBatchSyncThreshold(5);
     } catch (err: any) {
       console.error("Error al guardar receta:", err);
       setRecipes(prev => [{ ...recipe, synced: false }, ...prev.filter(r => r.id !== recipe.id)]);

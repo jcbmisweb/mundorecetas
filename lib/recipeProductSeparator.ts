@@ -177,7 +177,9 @@ export const executeDatabaseSeparation = async (
 
   // 2. Update Dexie IndexedDB
   try {
-    await localDB.recipes.clear();
+    for (const p of result.extractedProducts) {
+      await localDB.recipes.delete(p.id);
+    }
     if (result.cleanRecipes.length > 0) {
       await localDB.recipes.bulkPut(result.cleanRecipes);
     }

@@ -28,20 +28,14 @@ export const saveRecipeLocal = async (recipe: Recipe, isSynced: boolean = false)
     synced: isSynced
   };
   try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('IndexedDB put timeout')), 3000)
-    );
-    await Promise.race([
-      localDB.recipes.put(itemToSave),
-      timeoutPromise
-    ]);
+    await localDB.recipes.put(itemToSave);
   } catch (err) {
     console.warn("Could not save recipe to Dexie:", err);
   }
 };
 
 /**
- * Saves a product into IndexedDB locally with sync flag and timeout protection.
+ * Saves a product into IndexedDB locally with sync flag.
  */
 export const saveProductLocal = async (product: Product, isSynced: boolean = false): Promise<void> => {
   const itemToSave: Product = {
@@ -50,20 +44,14 @@ export const saveProductLocal = async (product: Product, isSynced: boolean = fal
     synced: isSynced
   };
   try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('IndexedDB put timeout')), 3000)
-    );
-    await Promise.race([
-      localDB.products.put(itemToSave),
-      timeoutPromise
-    ]);
+    await localDB.products.put(itemToSave);
   } catch (err) {
     console.warn("Could not save product to Dexie:", err);
   }
 };
 
 /**
- * Saves a menu plan into IndexedDB locally with sync flag and timeout protection.
+ * Saves a menu plan into IndexedDB locally with sync flag.
  */
 export const saveMenuPlanLocal = async (plan: MenuPlan, isSynced: boolean = false): Promise<void> => {
   const itemToSave: MenuPlan = {
@@ -71,13 +59,7 @@ export const saveMenuPlanLocal = async (plan: MenuPlan, isSynced: boolean = fals
     synced: isSynced
   };
   try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('IndexedDB put timeout')), 3000)
-    );
-    await Promise.race([
-      localDB.menuPlans.put(itemToSave),
-      timeoutPromise
-    ]);
+    await localDB.menuPlans.put(itemToSave);
   } catch (err) {
     console.warn("Could not save menu plan to Dexie:", err);
   }

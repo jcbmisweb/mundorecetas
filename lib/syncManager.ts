@@ -138,10 +138,8 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{ succe
             console.warn('Cuota de Firestore alcanzada. Pausando subida de recetas...');
             break;
           } else {
-            console.warn(`Error al subir receta ${recipe.id}:`, err);
-            // Marcar como sincronizado para no bloquear la cola si hay un problema estructural de tipo
-            await localDB.recipes.update(recipe.id, { synced: true });
-            count++;
+            console.warn(`Error al subir receta ${recipe.id}, se mantiene guardada en local:`, err);
+            // NUNCA marcar como sincronizado si falló la subida; permanece seguro en disco local
           }
         }
       }
@@ -194,7 +192,7 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{ succe
     }
 
     isQuotaExceeded = false;
-    notifyListeners(`✓ Sincronización completada (${count} elementos subidos)`);
+    notifyListeners(`✓ Sincronización completada (${count} elementos actualizados)`);
     return { success: true, syncedCount: count };
   } catch (err: any) {
     console.error('Error en la sincronización:', err);
@@ -204,25 +202,168 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{ succe
   }
 };
 
+const DAILY_SYNC_KEY = 'gastronomy_last_daily_sync_date';
+
+export const isDailySyncNeeded = (): boolean => {
+  try {
+    const lastSyncDate = localStorage.getItem(DAILY_SYNC_KEY);
+    const today = new Date().toISOString().slice(0, 10);
+    return lastSyncDate !== today;
+  } catch {
+    return true;
+  }
+};
+
+export const markDailySyncCompleted = () => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    localStorage.setItem(DAILY_SYNC_KEY, today);
+  } catch {}
+};
+
+export const getDailySyncStatus = () => {
+  try {
+    const lastSyncDate = localStorage.getItem(DAILY_SYNC_KEY);
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      isCompletedToday: lastSyncDate === today,
+      lastSyncDate: lastSyncDate || 'Nunca'
+    };
+  } catch {
+    return { isCompletedToday: false, lastSyncDate: 'Nunca' };
+  }
+};
+
 /**
- * Initializes automatic background sync interval and network status listeners.
+ * Realiza la comprobación diaria única al comenzar el día:
+ * - Comprueba si ya se hizo hoy. Si ya se hizo, NO LO VUELVE A HACER (evita revisiones constantes y ahorro de cuota).
+ * - Compara las recetas del disco local con las de la base de datos de Firebase.
+ * - Sube las recetas locales que falten o que tengan modificaciones pendientes (synced: false).
+ * - Descarga recetas remotas que falten en el equipo SIN SOBRESCRIBIR las locales modificadas.
+ * - Marca el día como verificado para no volver a ejecutar revisiones durante el resto del día.
  */
-export const startAutoSync = (intervalMinutes: number = 5, batchThreshold: number = 5) => {
+export const executeDailyVerification = async (force: boolean = false): Promise<{
+  executed: boolean;
+  uploadedCount: number;
+  downloadedCount: number;
+  message: string;
+}> => {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!force && !isDailySyncNeeded()) {
+    console.info(`[DailySync] Verificación diaria ya completada hoy (${today}). Usando datos locales de alta velocidad.`);
+    return {
+      executed: false,
+      uploadedCount: 0,
+      downloadedCount: 0,
+      message: `Comprobación del día completada (${today}). Base de datos local activa.`
+    };
+  }
+
+  isSyncing = true;
+  notifyListeners('Comprobando recetas locales con la base de datos (verificación del día)...');
+
+  let uploadedCount = 0;
+  let downloadedCount = 0;
+
+  try {
+    const localRecipes = await localDB.recipes.toArray();
+    const localMap = new Map<string, Recipe>(localRecipes.map(r => [r.id, r]));
+
+    let remoteDocs: Recipe[] = [];
+    try {
+      const snap = await getDocs(collection(db, 'recipes'));
+      remoteDocs = snap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Recipe));
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
+        setIsQuotaExceeded(true);
+      }
+      console.warn('[DailySync] Firestore no disponible o cuota alcanzada, manteniendo datos locales intactos:', err);
+    }
+
+    const remoteMap = new Map<string, Recipe>(remoteDocs.map(r => [r.id, r]));
+
+    // 1. Identificar recetas locales que necesitan subirse a la base de datos
+    const toUpload: Recipe[] = [];
+    for (const localR of localRecipes) {
+      if (!localR.id) continue;
+      const remoteR = remoteMap.get(localR.id);
+      if (!remoteR) {
+        // No existe en Firebase
+        toUpload.push(localR);
+      } else if (localR.synced === false || (localR.lastModified || 0) > (remoteR.lastModified || 0)) {
+        // Modificada en el PC
+        toUpload.push(localR);
+      }
+    }
+
+    // 2. Subir las recetas pendientes a Firestore si no hay bloqueo de cuota
+    if (!isQuotaExceeded && toUpload.length > 0) {
+      for (const r of toUpload) {
+        try {
+          const fitted = await ensureRecipeFitsFirestore({ ...r, synced: true });
+          await setDoc(doc(db, 'recipes', r.id), fitted, { merge: true });
+          await localDB.recipes.update(r.id, { ...fitted, synced: true });
+          localMap.set(r.id, { ...fitted, synced: true });
+          uploadedCount++;
+        } catch (uploadErr: any) {
+          const errMsg = uploadErr?.message || String(uploadErr);
+          if (errMsg.includes('Quota') || errMsg.includes('quota') || uploadErr?.code === 'resource-exhausted') {
+            setIsQuotaExceeded(true);
+            break;
+          }
+          console.warn(`[DailySync] No se pudo subir ${r.name || r.id}, conservada segura en local:`, uploadErr);
+        }
+      }
+    }
+
+    // 3. Descargar recetas de la nube que falten por completo en local
+    const toDownload: Recipe[] = [];
+    for (const remoteR of remoteDocs) {
+      if (!localMap.has(remoteR.id)) {
+        toDownload.push({ ...remoteR, synced: true });
+      }
+    }
+
+    if (toDownload.length > 0) {
+      await localDB.recipes.bulkPut(toDownload);
+      downloadedCount = toDownload.length;
+    }
+
+    // Marcar verificación diaria como completada para no volver a hacerlo hoy
+    markDailySyncCompleted();
+    lastSyncTime = Date.now();
+    isSyncing = false;
+    notifyListeners(`✓ Verificación diaria completada (${uploadedCount} subidas, ${downloadedCount} descargadas). No se volverá a comprobar hoy.`);
+
+    return {
+      executed: true,
+      uploadedCount,
+      downloadedCount,
+      message: `Comprobación diaria finalizada con éxito.`
+    };
+  } catch (err: any) {
+    console.error('[DailySync] Error durante la comprobación diaria:', err);
+    markDailySyncCompleted(); // Evitar bucle repetitivo de reintentos
+    isSyncing = false;
+    notifyListeners('Comprobación finalizada. Datos guardados en Local.');
+    return {
+      executed: false,
+      uploadedCount,
+      downloadedCount,
+      message: 'Comprobación finalizada con datos locales protegidos.'
+    };
+  }
+};
+
+/**
+ * Registra los listeners de sincronización sin ejecutar intervalos periódicos agresivos.
+ */
+export const startAutoSync = (_intervalMinutes: number = 5, _batchThreshold: number = 5) => {
   if (syncIntervalId) clearInterval(syncIntervalId);
+  syncIntervalId = null;
 
-  syncIntervalId = setInterval(() => {
-    if (!isQuotaExceeded) {
-      executeCloudSync();
-    }
-  }, intervalMinutes * 60 * 1000);
-
-  window.addEventListener('online', () => {
-    if (!isQuotaExceeded) {
-      console.log('Navegador en línea: comprobando sincronización...');
-      executeCloudSync();
-    }
-  });
-
+  // Ya NO se ejecuta el bucle de sondeo constante cada 5 minutos para ahorrar cuota
   notifyListeners();
 };
 
