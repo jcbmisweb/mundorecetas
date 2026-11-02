@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { VideoLink } from '../types';
-import { getVideoPlatformInfo } from '../lib/videoUtils';
-import { Plus, Trash2, ExternalLink, Video, Play, Sparkles } from 'lucide-react';
+import { getVideoPlatformInfo, sanitizeVideoUrl } from '../lib/videoUtils';
+import { Plus, Trash2, ExternalLink, Video, Play, Sparkles, AlertCircle } from 'lucide-react';
 
 interface VideoManagerInputProps {
   videos: VideoLink[];
@@ -19,10 +19,15 @@ export const VideoManagerInput: React.FC<VideoManagerInputProps> = ({
   const [newUrl, setNewUrl] = useState('');
   const [newTitle, setNewTitle] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   const handleAddVideo = () => {
-    const cleanUrl = newUrl.trim();
-    if (!cleanUrl) return;
+    setUrlError(null);
+    const cleanUrl = sanitizeVideoUrl(newUrl);
+    if (!cleanUrl) {
+      setUrlError('Introduce un enlace web o de vídeo válido (ej: https://www.youtube.com/... o youtu.be/...)');
+      return;
+    }
 
     const newVideo: VideoLink = {
       id: `vid_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -33,6 +38,7 @@ export const VideoManagerInput: React.FC<VideoManagerInputProps> = ({
     onChange([...videos, newVideo]);
     setNewUrl('');
     setNewTitle('');
+    setUrlError(null);
     setShowAddForm(false);
   };
 
@@ -131,6 +137,12 @@ export const VideoManagerInput: React.FC<VideoManagerInputProps> = ({
               />
             </div>
           </div>
+          {urlError && (
+            <p className="text-[10px] text-rose-600 font-bold flex items-center gap-1">
+              <AlertCircle size={12} className="shrink-0" />
+              <span>{urlError}</span>
+            </p>
+          )}
 
           <div className="flex justify-end gap-2 pt-1">
             <button

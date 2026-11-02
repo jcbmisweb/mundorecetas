@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Recipe, AppSettings, SubRecipe, Ingredient, AppUser, TakeAwayDetails } from '../types';
-import { normalizeVideos } from '../lib/videoUtils';
+import { normalizeVideos, sanitizeVideoUrl } from '../lib/videoUtils';
 import { isLiquidIngredient } from '../lib/unitUtils';
 import { ArrowLeft, Sparkles, Copy, Check, FileJson, AlertCircle, ShoppingBag, Utensils, Box, Clock } from 'lucide-react';
 
@@ -289,7 +289,7 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
         yieldUnit: data.yieldUnit || 'raciones',
         subRecipes: subRecipes,
         videos: normalizeVideos(data.videos, data.sourceUrl || data.videoUrl),
-        sourceUrl: data.sourceUrl || '',
+        sourceUrl: sanitizeVideoUrl(data.sourceUrl) || '',
         presentation: presentationNotes,
         platingInstructions: presentationNotes || platingNotes,
         importantNotes: importantNotesText,

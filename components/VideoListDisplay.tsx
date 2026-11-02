@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { VideoLink } from '../types';
 import { normalizeVideos, getVideoPlatformInfo, generateQrCodeDataUrl } from '../lib/videoUtils';
 import { Play, ExternalLink, Video, X, QrCode } from 'lucide-react';
@@ -18,17 +18,17 @@ export const VideoListDisplay: React.FC<VideoListDisplayProps> = ({
   variant = 'subRecipe',
   showQrInScreen = false
 }) => {
-  const normalized = normalizeVideos(videos, legacyUrl);
+  const normalized = useMemo(() => normalizeVideos(videos, legacyUrl), [videos, legacyUrl]);
   const [activeEmbed, setActiveEmbed] = useState<{ url: string; title: string } | null>(null);
   const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let isMounted = true;
     normalized.forEach(v => {
-      if (v.url && !qrCodes[v.url]) {
+      if (v.url) {
         generateQrCodeDataUrl(v.url).then(qr => {
           if (isMounted && qr) {
-            setQrCodes(prev => ({ ...prev, [v.url]: qr }));
+            setQrCodes(prev => (prev[v.url] === qr ? prev : { ...prev, [v.url]: qr }));
           }
         });
       }
@@ -141,6 +141,8 @@ export const VideoListDisplay: React.FC<VideoListDisplayProps> = ({
                   </div>
                   <a
                     href={vid.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-[8px] font-mono text-indigo-900 underline block break-all leading-tight"
                   >
                     {vid.url}

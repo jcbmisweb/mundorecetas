@@ -8,7 +8,7 @@ import {
 import { CategoryStripe } from './CategoryStripe';
 import { AllergenIcon } from './AllergenIcon';
 import { VideoManagerInput } from './VideoManagerInput';
-import { normalizeVideos } from '../lib/videoUtils';
+import { normalizeVideos, sanitizeVideoUrl } from '../lib/videoUtils';
 import { calculateIngredientCost } from '../lib/costUtils';
 import { compressImage, compressHeroBannerImage, getImageAspect } from '../lib/imageUtils';
 import { uploadFileToDrive, transformDriveUrl, GOOGLE_DRIVE_FOLDER_ID, sanitizeFileName } from '../lib/googleDriveService';
@@ -170,7 +170,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       // Usar 'banner' (Modelo Lubina) por defecto para todas las fichas técnicas
       setPhotoLayout(initialRecipe.photoLayout === 'classic' ? 'banner' : (initialRecipe.photoLayout || 'banner'));
       setCreator(initialRecipe.creator || appUser?.teacherName || appUser?.displayName || '');
-      setSourceUrl(initialRecipe.sourceUrl || '');
+      setSourceUrl(sanitizeVideoUrl(initialRecipe.sourceUrl) || '');
       setRecipeVideos(normalizeVideos(initialRecipe.videos, initialRecipe.sourceUrl || initialRecipe.videoUrl));
       setIsPublic(initialRecipe.isPublic || false);
       setServiceDetails(initialRecipe.serviceDetails || emptyServiceDetails);
@@ -518,7 +518,9 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     if (isSaving) return;
     setIsSaving(true);
     const totalCost = subRecipes.reduce((acc, sub) => acc + sub.ingredients.reduce((sAcc, ing) => sAcc + (ing.cost || 0), 0), 0);
-    const mainVideoUrl = recipeVideos.length > 0 ? recipeVideos[0].url : sourceUrl;
+    const validRecipeVideos = recipeVideos.filter(v => Boolean(sanitizeVideoUrl(v.url)));
+    const cleanSourceUrl = sanitizeVideoUrl(sourceUrl);
+    const mainVideoUrl = validRecipeVideos.length > 0 ? validRecipeVideos[0].url : (cleanSourceUrl || '');
     try {
       await onSave({
         id: initialRecipe?.id || Date.now().toString(),
@@ -529,16 +531,20 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         photoLayout,
         creator, 
         sourceUrl: mainVideoUrl,
-        videos: recipeVideos,
+        videos: validRecipeVideos,
         videoUrl: mainVideoUrl || undefined,
         isPublic,
         yieldQuantity: yieldQuantity || 1,
         yieldUnit, totalCost: totalCost || 0,
-        subRecipes: JSON.parse(JSON.stringify(subRecipes.map(sr => ({
-          ...sr,
-          videos: sr.videos || [],
-          videoUrl: sr.videos && sr.videos.length > 0 ? sr.videos[0].url : (sr.videoUrl || undefined)
-        })))), // Deep copy to ensure state is captured
+        subRecipes: JSON.parse(JSON.stringify(subRecipes.map(sr => {
+          const validSubVideos = (sr.videos || []).filter(v => Boolean(sanitizeVideoUrl(v.url)));
+          const validSubUrl = validSubVideos.length > 0 ? validSubVideos[0].url : (sanitizeVideoUrl(sr.videoUrl) || undefined);
+          return {
+            ...sr,
+            videos: validSubVideos,
+            videoUrl: validSubUrl
+          };
+        }))), // Deep copy to ensure state is captured
         platingInstructions: presentation || platingInstructions,
         presentation: presentation || platingInstructions,
         importantNotes: importantNotes,

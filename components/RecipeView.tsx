@@ -45,6 +45,7 @@ import { CategoryStripe } from "./CategoryStripe";
 import { AllergenIcon } from "./AllergenIcon";
 import { MolecularPairings } from "./MolecularPairings";
 import { VideoListDisplay } from "./VideoListDisplay";
+import { hasValidVideos } from "../lib/videoUtils";
 import { ImagePromptModal } from "./ImagePromptModal";
 
 interface RecipeViewProps {
@@ -1211,7 +1212,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
           </div>
 
           {/* VÍDEOS Y ENLACES GENERALES DEL PLATO */}
-          {recipe.videos?.length || recipe.sourceUrl || recipe.videoUrl ? (
+          {hasValidVideos(recipe.videos, recipe.sourceUrl || recipe.videoUrl) ? (
             <VideoListDisplay
               videos={recipe.videos}
               legacyUrl={recipe.sourceUrl || recipe.videoUrl}
@@ -1307,12 +1308,14 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                         <div className="text-[10px] text-slate-600 leading-snug text-justify whitespace-pre-wrap font-serif italic instructions-text">
                           {sub.instructions || "Técnica no definida."}
                         </div>
-                        <VideoListDisplay
-                          videos={sub.videos}
-                          legacyUrl={sub.videoUrl}
-                          title={`Vídeos Técnicos: ${sub.name}`}
-                          variant="subRecipe"
-                        />
+                        {hasValidVideos(sub.videos, sub.videoUrl) ? (
+                          <VideoListDisplay
+                            videos={sub.videos}
+                            legacyUrl={sub.videoUrl}
+                            title={`Vídeos Técnicos: ${sub.name}`}
+                            variant="subRecipe"
+                          />
+                        ) : null}
                       </div>
                     </div>
                   </div>

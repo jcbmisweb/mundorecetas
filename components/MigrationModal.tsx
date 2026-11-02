@@ -5,7 +5,7 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal } from '../db/dexieDB';
 import { compressBase64Image } from '../lib/imageUtils';
-import { normalizeVideos } from '../lib/videoUtils';
+import { normalizeVideos, sanitizeVideoUrl } from '../lib/videoUtils';
 import { parseRecipesFromCSV, parseProductsFromCSV } from '../lib/csvParser';
 import { 
   X, Database, ArrowRight, Download, Upload, CheckCircle2, 
@@ -183,6 +183,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
     }
 
     r.videos = normalizeVideos(r.videos, r.sourceUrl || r.videoUrl);
+    r.sourceUrl = sanitizeVideoUrl(r.sourceUrl) || '';
     delete r.ingredients;
     delete r.instructions;
 
