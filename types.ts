@@ -115,7 +115,11 @@ export interface ProIngredientItem {
   id: string;
   name: string;
   netGrams: number;
+  grossGrams?: number; // Peso bruto antes de mermas
   bakersPercentage: number; // % sobre el ingrediente base
+  yieldPercentage?: number; // Rendimiento (%) = (peso neto ÷ peso bruto) × 100
+  wastePercentage?: number; // Merma (%) = 100 − rendimiento
+  unitPrice?: number; // Precio de compra por kg (€/kg)
   isBase?: boolean; // Si es el ingrediente base (100%)
   notes: string; // Variedad, calibre, origen, corte
   allergens: Allergen[];
@@ -139,6 +143,12 @@ export interface ProComponentStorage {
   regeneration?: string;
 }
 
+export interface ProMiseEnPlace {
+  dayBefore?: string; // Qué se prepara el día antes
+  morning?: string;   // Qué por la mañana
+  service?: string;   // Qué en el momento del servicio
+}
+
 export interface ProComponentElaboration {
   id: string;
   code: string; // ej: FT-ELA-001
@@ -147,11 +157,14 @@ export interface ProComponentElaboration {
   roleInDish: string; // Función dentro del plato
   targetYieldGrams: number; // Rendimiento objetivo en gramos
   actualYieldGrams?: number; // Rendimiento real
+  grossWeightGrams?: number; // Peso bruto total estimado
   wastePercentage?: number; // % merma
   equipmentNeeded: string[];
   ingredients: ProIngredientItem[];
   processSteps: ProProcessStep[];
   storage: ProComponentStorage;
+  miseEnPlace?: ProMiseEnPlace; // Mise en place temporalizada (apartado 3 Nivel 2)
+  allergens?: Allergen[]; // Alérgenos propios de esta sub-elaboración (apartado 5)
   cost?: number;
 }
 
@@ -183,11 +196,134 @@ export interface ProVersionChange {
   reason: string;
 }
 
+export interface ProPCCItem {
+  id: string;
+  stage: string;           // Etapa (Cocción, Enfriamiento/Abatidor, Conservación frío, Mantenimiento caliente)
+  hazard: string;          // Peligro (Supervivencia de patógenos, Crecimiento bacteriano)
+  criticalLimit: string;   // Límite crítico (Temp corazón, 65°C a <=10°C <2h, 0-4°C, >=65°C)
+  monitoring: string;      // Vigilancia (Termómetro sonda, Sonda + reloj, Lectura cámara)
+  correctiveAction: string;// Acción correctora (Prolongar cocción, descartar, regenerar)
+  record: string;          // Registro (Hoja temperaturas, Hoja abatimiento, Registro cámaras, Hoja pase)
+  verified?: boolean;
+}
+
+export interface ProRubricEvaluation {
+  scores: {
+    techniqueCooking: number;        // Técnica y punto de cocción (25% - escala 0..4)
+    foodSafetyHaccp: number;         // Seguridad alimentaria y APPCC (25% - escala 0..4)
+    platingGrammage: number;         // Montaje y gramaje (15% - escala 0..4)
+    serviceTempTime: number;         // Temperatura y tiempo de servicio (10% - escala 0..4)
+    flavorTexture: number;           // Sabor y textura / cata (15% - escala 0..4)
+    organizationMiseEnPlace: number; // Organización, mise en place y limpieza (10% - escala 0..4)
+  };
+  evaluator?: string;
+  date?: string;
+  weightedScore?: number; // Nota ponderada sobre 4 o 10
+  feedback?: string;
+}
+
+export const DEFAULT_PCC_PLAN: ProPCCItem[] = [
+  {
+    id: 'pcc-1',
+    stage: 'Cocción de la pieza',
+    hazard: 'Supervivencia de patógenos',
+    criticalLimit: 'Temperatura de corazón y tiempo según tabla de pasteurización',
+    monitoring: 'Termómetro de sonda en cada pieza',
+    correctiveAction: 'Prolongar la cocción o descartar',
+    record: 'Hoja de temperaturas'
+  },
+  {
+    id: 'pcc-2',
+    stage: 'Enfriamiento (abatidor)',
+    hazard: 'Crecimiento bacteriano',
+    criticalLimit: 'De 65 °C a ≤ 10 °C en el tiempo máximo fijado por el centro (< 2 h)',
+    monitoring: 'Sonda + reloj',
+    correctiveAction: 'Repetir el abatimiento o descartar',
+    record: 'Hoja de abatimiento'
+  },
+  {
+    id: 'pcc-3',
+    stage: 'Conservación en frío',
+    hazard: 'Crecimiento bacteriano',
+    criticalLimit: '0-4 °C (o según producto)',
+    monitoring: 'Lectura de cámara al inicio y fin de jornada',
+    correctiveAction: 'Revisar equipo y evaluar el producto',
+    record: 'Registro de cámaras'
+  },
+  {
+    id: 'pcc-4',
+    stage: 'Mantenimiento en caliente',
+    hazard: 'Crecimiento bacteriano',
+    criticalLimit: '≥ 65 °C',
+    monitoring: 'Sonda antes del pase',
+    correctiveAction: 'Regenerar o descartar',
+    record: 'Hoja de pase'
+  }
+];
+
+export const RUBRIC_CRITERIA: { key: keyof ProRubricEvaluation['scores']; label: string; weight: number; desc01: string; desc2: string; desc3: string; desc4: string }[] = [
+  {
+    key: 'techniqueCooking',
+    label: 'Técnica y punto de cocción',
+    weight: 25,
+    desc01: 'Fuera de rango',
+    desc2: 'Limitado, con desviaciones',
+    desc3: 'Correcto',
+    desc4: 'Exacto y uniforme'
+  },
+  {
+    key: 'foodSafetyHaccp',
+    label: 'Seguridad alimentaria y APPCC',
+    weight: 25,
+    desc01: 'Incumple un límite crítico',
+    desc2: 'Registros incompletos',
+    desc3: 'Cumple con registros',
+    desc4: 'Cumple, registra y anticipa'
+  },
+  {
+    key: 'platingGrammage',
+    label: 'Montaje y gramaje',
+    weight: 15,
+    desc01: 'No sigue la ficha',
+    desc2: 'Varias desviaciones',
+    desc3: 'Desviaciones menores',
+    desc4: 'Idéntico a la ficha'
+  },
+  {
+    key: 'serviceTempTime',
+    label: 'Temperatura y tiempo de servicio',
+    weight: 10,
+    desc01: 'Fuera de rango',
+    desc2: 'Límite',
+    desc3: 'Correcto',
+    desc4: 'Óptimo'
+  },
+  {
+    key: 'flavorTexture',
+    label: 'Sabor y textura (cata)',
+    weight: 15,
+    desc01: 'Desequilibrado',
+    desc2: 'Mejorable',
+    desc3: 'Equilibrado',
+    desc4: 'Memorable'
+  },
+  {
+    key: 'organizationMiseEnPlace',
+    label: 'Organización, mise en place y limpieza',
+    weight: 10,
+    desc01: 'Desordenado',
+    desc2: 'Irregular',
+    desc3: 'Ordenado',
+    desc4: 'Eficiente y trabaja en brigada'
+  }
+];
+
 export interface ProRecipe {
   id: string;
   code: string; // ej: FT-DIS-001
   version: string; // ej: "1.0"
   status: ProRecipeStatus;
+  useLevel?: 'basic' | 'advanced'; // Nivel de uso: Básico (1, 2, 5) vs Avanzado (1 a 5 + cata/PCC)
   responsible: string; // Chef creativo / Jefe de partida
   workspaceId?: string;
   createdAt: number;
@@ -239,6 +375,9 @@ export interface ProRecipe {
     tastingHistory: ProTastingLog[];
   };
 
+  // Rúbrica oficial de evaluación del plato (Apartado 6)
+  rubricEvaluation?: ProRubricEvaluation;
+
   // Nivel 5 · Trazabilidad y mejora
   traceability: {
     approvedShelfLife: string;
@@ -249,6 +388,9 @@ export interface ProRecipe {
     salePriceObjective?: number;
     targetFoodCostPercentage?: number; // ej: 28%
   };
+
+  // Cuadro oficial de Puntos Críticos de Control APPCC (Apartado 7)
+  pccPlan?: ProPCCItem[];
 }
 
 export interface TakeAwayHomeFinishing {

@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { 
   ProRecipe, ProFamilyType, ProRecipeStatus, ProComponentElaboration,
-  ProIngredientItem, ProProcessStep, Allergen, ALLERGEN_LIST, AppSettings
+  ProIngredientItem, ProProcessStep, Allergen, ALLERGEN_LIST, AppSettings,
+  DEFAULT_PCC_PLAN, RUBRIC_CRITERIA, ProPCCItem, ProRubricEvaluation
 } from '../types';
 import { ProSensoryRadarChart } from './ProSensoryRadarChart';
 import { 
   Save, ArrowLeft, Eye, Plus, Trash2, Clock, Thermometer, 
   Sparkles, CheckCircle2, AlertTriangle, Layers, Award,
   Scale, RefreshCw, ChevronDown, ChevronUp, FileText, Compass,
-  BookOpen, HelpCircle
+  BookOpen, HelpCircle, ShieldCheck, AlertCircle, Check, Percent
 } from 'lucide-react';
 
 interface ProRecipeEditorProps {
@@ -130,6 +131,21 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
                 {recipe.code}
               </span>
               <span className="text-xs text-slate-400 font-mono">v{recipe.version}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextLevel = recipe.useLevel === 'basic' ? 'advanced' : 'basic';
+                  updateRecipeField('useLevel', nextLevel);
+                }}
+                className={`text-[9.5px] font-mono font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                  recipe.useLevel === 'basic'
+                    ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                    : 'bg-amber-500/10 text-amber-300 border-amber-500/40'
+                }`}
+                title="Cambiar nivel de uso (Apartado 2 del Manual): Básico (Niveles 1, 2 y 5) o Avanzado (1 a 5 completos)"
+              >
+                Nivel: {recipe.useLevel === 'basic' ? 'Básico (1, 2, 5)' : 'Avanzado (Completo)'}
+              </button>
             </div>
             <h1 className="text-sm font-bold text-white truncate max-w-[200px] sm:max-w-md">
               {recipe.name || 'Nueva Ficha Técnica Profesional'}
@@ -672,8 +688,10 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
                                 <tr>
                                   <th className="py-2 px-2">Base</th>
                                   <th className="py-2 px-2">Ingrediente</th>
+                                  <th className="py-2 px-2 text-right">Peso Bruto (g)</th>
                                   <th className="py-2 px-2 text-right">Cant. Neta (g)</th>
                                   <th className="py-2 px-2 text-right">% s/ Base</th>
+                                  <th className="py-2 px-2 text-right">Merma %</th>
                                   <th className="py-2 px-2">Observaciones / Corte</th>
                                   <th className="py-2 px-2 text-center">Acciones</th>
                                 </tr>
@@ -709,17 +727,41 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
                                       <input
                                         type="number"
                                         step="0.1"
+                                        placeholder="Bruto"
+                                        value={ing.grossGrams || ''}
+                                        onChange={e => {
+                                          const gross = parseFloat(e.target.value) || undefined;
+                                          const yieldPct = gross && gross > 0 ? parseFloat(((ing.netGrams / gross) * 100).toFixed(1)) : undefined;
+                                          const wastePct = yieldPct !== undefined ? parseFloat((100 - yieldPct).toFixed(1)) : undefined;
+                                          const updated = comp.ingredients.map(i => i.id === ing.id ? { ...i, grossGrams: gross, yieldPercentage: yieldPct, wastePercentage: wastePct } : i);
+                                          updateComponent(c => ({ ...c, ingredients: updated }));
+                                        }}
+                                        className="w-16 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-xs text-right font-mono text-slate-300"
+                                        title="Peso bruto (tal como llega del proveedor)"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-2 text-right">
+                                      <input
+                                        type="number"
+                                        step="0.1"
                                         value={ing.netGrams}
                                         onChange={e => {
-                                          const val = parseFloat(e.target.value) || 0;
-                                          const updated = comp.ingredients.map(i => i.id === ing.id ? { ...i, netGrams: val } : i);
+                                          const net = parseFloat(e.target.value) || 0;
+                                          const gross = ing.grossGrams;
+                                          const yieldPct = gross && gross > 0 ? parseFloat(((net / gross) * 100).toFixed(1)) : undefined;
+                                          const wastePct = yieldPct !== undefined ? parseFloat((100 - yieldPct).toFixed(1)) : undefined;
+                                          const updated = comp.ingredients.map(i => i.id === ing.id ? { ...i, netGrams: net, yieldPercentage: yieldPct, wastePercentage: wastePct } : i);
                                           updateComponent(c => ({ ...c, ingredients: recalculateBakersPercentages(updated) }));
                                         }}
-                                        className="w-20 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-right font-mono text-white"
+                                        className="w-16 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-xs text-right font-mono text-white"
+                                        title="Peso neto (limpio y listo para cocinar)"
                                       />
                                     </td>
                                     <td className="py-2 px-2 text-right font-mono text-amber-300 font-bold">
                                       {ing.bakersPercentage}%
+                                    </td>
+                                    <td className="py-2 px-2 text-right font-mono text-[11px] text-slate-400">
+                                      {ing.wastePercentage !== undefined && ing.wastePercentage > 0 ? `${ing.wastePercentage}%` : '—'}
                                     </td>
                                     <td className="py-2 px-2">
                                       <input
@@ -901,6 +943,111 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
                             />
                           </div>
                         </div>
+
+                        {/* Mise en Place Temporalizada (Apartado 3 Nivel 2 del Manual Oficial) */}
+                        <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
+                          <span className="text-xs font-mono uppercase font-bold text-amber-300 flex items-center gap-1.5">
+                            <Clock size={13} className="text-amber-400" />
+                            Mise en Place Temporalizada (Organización del Servicio)
+                          </span>
+                          <p className="text-[11px] text-slate-400">
+                            Define qué se prepara el día antes, por la mañana y en el momento del pase.
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                            <div>
+                              <label className="block text-[10px] font-mono text-slate-300 font-bold mb-1">
+                                🕒 Día Antes (Pre-elaboraciones):
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={comp.miseEnPlace?.dayBefore || ''}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  updateComponent(c => ({
+                                    ...c,
+                                    miseEnPlace: { ...(c.miseEnPlace || {}), dayBefore: val }
+                                  }));
+                                }}
+                                placeholder="Ej: Fondos, marinados, reducciones, fermentos..."
+                                className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-white text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-mono text-slate-300 font-bold mb-1">
+                                🌅 Por la Mañana (Preparación fresca):
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={comp.miseEnPlace?.morning || ''}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  updateComponent(c => ({
+                                    ...c,
+                                    miseEnPlace: { ...(c.miseEnPlace || {}), morning: val }
+                                  }));
+                                }}
+                                placeholder="Ej: Porcionado, blanqueados, salsas frescas..."
+                                className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-white text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-mono text-slate-300 font-bold mb-1">
+                                🔔 Momento del Servicio (Al pase):
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={comp.miseEnPlace?.service || ''}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  updateComponent(c => ({
+                                    ...c,
+                                    miseEnPlace: { ...(c.miseEnPlace || {}), service: val }
+                                  }));
+                                }}
+                                placeholder="Ej: Regenerar a ≥65°C, marcado final, sal marina..."
+                                className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-white text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Alérgenos de la Sub-elaboración (Apartado 5 del Manual Oficial) */}
+                        <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-mono uppercase font-bold text-amber-300 flex items-center gap-1.5">
+                              <AlertCircle size={13} className="text-amber-400" />
+                              Alérgenos de esta Sub-elaboración (14 Oficiales UE 1169/2011)
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {(comp.allergens || []).length} declarados
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {ALLERGEN_LIST.map(al => {
+                              const isChecked = (comp.allergens || []).includes(al);
+                              return (
+                                <button
+                                  key={al}
+                                  type="button"
+                                  onClick={() => {
+                                    const current = comp.allergens || [];
+                                    const updatedAllergens = isChecked
+                                      ? current.filter(x => x !== al)
+                                      : [...current, al];
+                                    updateComponent(c => ({ ...c, allergens: updatedAllergens }));
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all border cursor-pointer ${
+                                    isChecked
+                                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-300'
+                                  }`}
+                                >
+                                  {isChecked ? '✓ ' : ''}{al}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -931,6 +1078,19 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
                   Ver Manual Completo (PDF)
                 </button>
               )}
+            </div>
+
+            {/* Nota de Seguridad Oficial RD 3484/2000 (Apartado 3 Nivel 3) */}
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-start gap-2.5">
+              <ShieldCheck size={16} className="text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5 leading-relaxed">
+                <span className="font-bold text-amber-200 uppercase font-mono text-[10px] block">
+                  Nota de Seguridad Oficial (RD 3484/2000):
+                </span>
+                <span>
+                  La referencia para mantener comida caliente es <strong>≥ 65 °C</strong>. El «punto rosado» de una pieza de carne o pescado es una cocción específica que debe justificarse con una combinación tiempo/temperatura de pasteurización. Las aves y la carne picada no admiten puntos rosados sin protocolo específico.
+                </span>
+              </div>
             </div>
 
             <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-6">
@@ -1457,6 +1617,162 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Rúbrica Oficial de Evaluación del Plato (Apartado 6 del Manual) */}
+            <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div>
+                  <h3 className="text-xs font-mono uppercase font-bold text-white flex items-center gap-1.5">
+                    <Award size={15} className="text-amber-400" /> Rúbrica Oficial de Evaluación del Plato (0 a 4 puntos)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Puntúa cada criterio (0 = no cumple · 2 = cumple con mejoras · 4 = excelente). Ponderación oficial del módulo.
+                  </p>
+                </div>
+                {/* Nota ponderada calculada sobre 10 */}
+                {(() => {
+                  const scores = recipe.rubricEvaluation?.scores || {
+                    techniqueCooking: 0,
+                    foodSafetyHaccp: 0,
+                    platingGrammage: 0,
+                    serviceTempTime: 0,
+                    flavorTexture: 0,
+                    organizationMiseEnPlace: 0
+                  };
+                  let weightedSum = 0;
+                  RUBRIC_CRITERIA.forEach(c => {
+                    const sc = scores[c.key] ?? 0;
+                    weightedSum += sc * (c.weight / 100);
+                  });
+                  const grade10 = parseFloat(((weightedSum / 4) * 10).toFixed(2));
+                  return (
+                    <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-amber-500/30">
+                      <span className="text-[10px] font-mono text-slate-400 uppercase">Nota Final Ponderada:</span>
+                      <span className="font-mono font-black text-amber-300 text-sm">{grade10} / 10</span>
+                      <span className="text-[10px] text-slate-400 font-mono">({weightedSum.toFixed(2)}/4)</span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="space-y-3">
+                {RUBRIC_CRITERIA.map(crit => {
+                  const currentScore = recipe.rubricEvaluation?.scores?.[crit.key] ?? 0;
+                  return (
+                    <div key={crit.key} className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-xs">{crit.label}</span>
+                          <span className="text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">
+                            Peso: {crit.weight}%
+                          </span>
+                        </div>
+                        {/* Selector 0 a 4 */}
+                        <div className="flex items-center gap-1">
+                          {[0, 1, 2, 3, 4].map(num => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => {
+                                const currentScores = recipe.rubricEvaluation?.scores || {
+                                  techniqueCooking: 0,
+                                  foodSafetyHaccp: 0,
+                                  platingGrammage: 0,
+                                  serviceTempTime: 0,
+                                  flavorTexture: 0,
+                                  organizationMiseEnPlace: 0
+                                };
+                                const updatedScores = { ...currentScores, [crit.key]: num };
+                                let wSum = 0;
+                                RUBRIC_CRITERIA.forEach(c => {
+                                  wSum += (updatedScores[c.key] || 0) * (c.weight / 100);
+                                });
+                                const g10 = parseFloat(((wSum / 4) * 10).toFixed(2));
+                                setRecipe(p => ({
+                                  ...p,
+                                  rubricEvaluation: {
+                                    ...(p.rubricEvaluation || { evaluator: settings.teacherName || '', date: new Date().toISOString().split('T')[0] }),
+                                    scores: updatedScores,
+                                    weightedScore: g10
+                                  }
+                                }));
+                                setHasUnsavedChanges(true);
+                              }}
+                              className={`w-7 h-7 rounded-lg font-mono text-xs font-bold transition-all border cursor-pointer ${
+                                currentScore === num
+                                  ? num >= 3
+                                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm'
+                                    : num === 2
+                                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                                    : 'bg-rose-500 text-white border-rose-400 shadow-sm'
+                                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white'
+                              }`}
+                            >
+                              {num}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1.5 text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-900">
+                        <span className={currentScore <= 1 ? 'text-rose-400 font-bold' : ''}>0-1: {crit.desc01}</span>
+                        <span className={currentScore === 2 ? 'text-amber-300 font-bold' : ''}>2: {crit.desc2}</span>
+                        <span className={currentScore === 3 ? 'text-emerald-300 font-bold' : ''}>3: {crit.desc3}</span>
+                        <span className={currentScore === 4 ? 'text-emerald-400 font-bold' : ''}>4: {crit.desc4}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Evaluador y Observaciones */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-400 uppercase font-bold mb-1">
+                    Evaluador / Profesor
+                  </label>
+                  <input
+                    type="text"
+                    value={recipe.rubricEvaluation?.evaluator || settings.teacherName || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setRecipe(p => ({
+                        ...p,
+                        rubricEvaluation: {
+                          ...(p.rubricEvaluation || { scores: { techniqueCooking: 0, foodSafetyHaccp: 0, platingGrammage: 0, serviceTempTime: 0, flavorTexture: 0, organizationMiseEnPlace: 0 } }),
+                          evaluator: val
+                        }
+                      }));
+                      setHasUnsavedChanges(true);
+                    }}
+                    placeholder="Nombre del docente o chef evaluador"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-400 uppercase font-bold mb-1">
+                    Observaciones y Feedback de la Rúbrica
+                  </label>
+                  <input
+                    type="text"
+                    value={recipe.rubricEvaluation?.feedback || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setRecipe(p => ({
+                        ...p,
+                        rubricEvaluation: {
+                          ...(p.rubricEvaluation || { scores: { techniqueCooking: 0, foodSafetyHaccp: 0, platingGrammage: 0, serviceTempTime: 0, flavorTexture: 0, organizationMiseEnPlace: 0 } }),
+                          feedback: val
+                        }
+                      }));
+                      setHasUnsavedChanges(true);
+                    }}
+                    placeholder="Comentarios pedagógicos para el alumno..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1599,6 +1915,120 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
                   }}
                   className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-emerald-400 font-mono text-sm font-bold"
                 />
+              </div>
+            </div>
+
+            {/* Fórmulas Didácticas de Escandallo y Costes (Apartado 4 del Manual) */}
+            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-3">
+              <h3 className="text-xs font-mono uppercase font-bold text-amber-300 flex items-center gap-1.5">
+                <Percent size={14} className="text-amber-400" /> Fórmulas Oficiales de Escandallo (Apartado 4 del Manual)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
+                <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-[11px]">
+                  <span className="text-amber-400 font-bold block">Rendimiento (%)</span>
+                  <span className="text-slate-300">peso neto ÷ peso bruto × 100</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-[11px]">
+                  <span className="text-amber-400 font-bold block">Merma (%)</span>
+                  <span className="text-slate-300">100 − rendimiento</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-[11px]">
+                  <span className="text-amber-400 font-bold block">Coste Ingrediente</span>
+                  <span className="text-slate-300">(precio ÷ rendimiento) × cant. neta</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-[11px]">
+                  <span className="text-amber-400 font-bold block">Coste por Ración</span>
+                  <span className="text-slate-300">coste total elaboración ÷ nº raciones</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-[11px]">
+                  <span className="text-amber-400 font-bold block">Food Cost (%)</span>
+                  <span className="text-slate-300">coste ración ÷ PVP sin IVA × 100</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-[11px]">
+                  <span className="text-amber-400 font-bold block">PVP Sugerido</span>
+                  <span className="text-slate-300">coste ración ÷ food cost objetivo</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Cuadro Oficial de PCC - Puntos Críticos de Control (Apartado 7 del Manual) */}
+            <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div>
+                  <h3 className="text-xs font-mono uppercase font-bold text-white flex items-center gap-1.5">
+                    <ShieldCheck size={15} className="text-emerald-400" /> Cuadro de Puntos Críticos de Control (PCC · APPCC)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Protocolo oficial de seguridad alimentaria y límites críticos obligatorios.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecipe(p => ({
+                      ...p,
+                      pccPlan: [...DEFAULT_PCC_PLAN]
+                    }));
+                    setHasUnsavedChanges(true);
+                  }}
+                  className="flex items-center gap-1.5 text-xs bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-bold px-3 py-1.5 rounded-lg border border-emerald-500/40 transition-all cursor-pointer"
+                >
+                  <RefreshCw size={13} /> Cargar los 4 PCCs del Manual Oficial
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-[10px] font-mono uppercase text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="py-2 px-2.5 w-36">Etapa</th>
+                      <th className="py-2 px-2.5 w-44">Peligro</th>
+                      <th className="py-2 px-2.5">Límite Crítico</th>
+                      <th className="py-2 px-2.5">Vigilancia</th>
+                      <th className="py-2 px-2.5">Acción Correctora</th>
+                      <th className="py-2 px-2.5 w-32">Registro</th>
+                      <th className="py-2 px-2 text-center w-12">Verif.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850">
+                    {(recipe.pccPlan && recipe.pccPlan.length > 0 ? recipe.pccPlan : DEFAULT_PCC_PLAN).map((pcc, idx) => (
+                      <tr key={pcc.id || idx} className="hover:bg-slate-950/40">
+                        <td className="py-2 px-2.5 font-bold text-white font-mono text-[11px]">
+                          {pcc.stage}
+                        </td>
+                        <td className="py-2 px-2.5 text-rose-300 text-[11px]">
+                          {pcc.hazard}
+                        </td>
+                        <td className="py-2 px-2.5 text-slate-300 font-mono text-[11px]">
+                          {pcc.criticalLimit}
+                        </td>
+                        <td className="py-2 px-2.5 text-slate-300 text-[11px]">
+                          {pcc.monitoring}
+                        </td>
+                        <td className="py-2 px-2.5 text-slate-300 text-[11px]">
+                          {pcc.correctiveAction}
+                        </td>
+                        <td className="py-2 px-2.5 font-mono text-[10px] text-amber-300">
+                          {pcc.record}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={!!pcc.verified}
+                            onChange={e => {
+                              const plan = [...(recipe.pccPlan && recipe.pccPlan.length > 0 ? recipe.pccPlan : DEFAULT_PCC_PLAN)];
+                              plan[idx] = { ...pcc, verified: e.target.checked };
+                              setRecipe(p => ({ ...p, pccPlan: plan }));
+                              setHasUnsavedChanges(true);
+                            }}
+                            className="rounded border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
+                            title="Verificado conforme al plan APPCC"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

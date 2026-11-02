@@ -187,7 +187,7 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
     const headers = "Familia,Nombre,Precio (€),Unidad,Peso por Unidad (g),Alergenos";
     const rows = products.map(p => {
       const allergenCodes = (p.allergens || []).map(a => REVERSE_ALLERGEN_MAP[a] || a).join('|');
-      const price = p.pricePerUnit === 0 ? 'precio_no_disponible' : p.pricePerUnit.toString();
+      const price = !p.pricePerUnit || p.pricePerUnit === 0 ? 'precio_no_disponible' : String(p.pricePerUnit);
       const weight = p.weightPerUnit || '';
       const name = p.name.includes(',') ? `"${p.name}"` : p.name;
       const family = (p.category || 'Varios').includes(',') ? `"${p.category}"` : p.category || 'Varios';
