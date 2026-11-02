@@ -31,6 +31,8 @@ REGLAS DE FORMATO:
   "yieldQuantity": 4, 
   "yieldUnit": "raciones",
   "allergens": ["Gluten", "Lácteos"],
+  "presentation": "PRESENTACIÓN: Instrucciones detalladas de emplatado, arquitectura del plato, vajilla seleccionada y acabado visual antes del pase.",
+  "importantNotes": "PUNTOS IMPORTANTES (SI LOS HAY): Puntos críticos de cocción, temperaturas límite de pase, control sanitario o advertencias.",
   "minimalistCard": {
     "miniComment": "Descripción sugerente y comercial del plato (máximo 1-2 frases elegantes para carta, destacando texturas y matices).",
     "summaryInstructions": "1. Síntesis paso 1... 2. Síntesis paso 2... 3. Acabado...",
@@ -46,6 +48,7 @@ REGLAS DE FORMATO:
   "notes": "Puntos críticos o consejos de emplatado",
   "serviceDetails": {
     "presentation": "Cómo emplatar",
+    "importantNotes": "Puntos importantes si los hay",
     "servingTemp": "Temp ideal",
     "cutlery": "Cubiertos",
     "passTime": "Tiempo estimado",
@@ -55,6 +58,8 @@ REGLAS DE FORMATO:
 }
 
 REGLAS TÉCNICAS:
+- "presentation": Apartado fundamental de PRESENTACIÓN (vajilla, disposición y pase).
+- "importantNotes": Apartado de PUNTOS IMPORTANTES (SI LOS HAY) (temperatura, advertencias críticas).
 - "yieldQuantity" es el Rendimiento (PAX), SIEMPRE numérico.
 - "yieldUnit" es la Unidad de Medida (ej: raciones, pax, personas).
 - REGLA CRÍTICA DE UNIDADES: Ingredientes líquidos (leche, aceite, agua, vinos, caldos, nata, vinagre, etc.) deben expresarse SIEMPRE en volumen ('l' o 'ml'), NUNCA en 'kg' ni 'g'. Los sólidos en 'kg' o 'g'. Unidades sueltas en 'ud'.
@@ -79,10 +84,13 @@ CRITERIOS CULINARIOS CRÍTICOS PARA TAKE AWAY:
    - Separar crujientes, tejas y hierbas frescas en bolsitas o envases secos aparte para coronar en casa en el último segundo.
    - Puntos de cocción adaptados (ej: pasta al dente -2 minutos; pescados al 85% para no quedar secos al regenerar).
 3. PACKAGING RECOMENDADO: Especificar envase (ej: cartón kraft termosellable microondable, tarrinas herméticas 50ml, caja ventilada para fritos).
-4. ENCARTE / INSTRUCCIONES PARA EL CLIENTE (CÓMO TERMINAR EN CASA):
+4. PRESENTACIÓN Y PUNTOS IMPORTANTES:
+   - PRESENTACIÓN: Disposición cuidada en el envase principal, separación de salsas y crujientes secos.
+   - PUNTOS IMPORTANTES (SI LOS HAY): Directrices críticas de envasado, transporte sin vuelco y regeneración.
+5. ENCARTE / INSTRUCCIONES PARA EL CLIENTE (CÓMO TERMINAR EN CASA):
    - Explicar método de regeneración (Microondas, Horno, Sartén, Baño María o Consumo en Frío) con tiempos y potencia precisos.
    - Explicar el emplatado final en casa ("verter la salsa caliente", "añadir el crujiente reservado").
-5. ALÉRGENOS: Identificar con total rigor los alérgenos presentes entre los 14 legales.
+6. ALÉRGENOS: Identificar con total rigor los alérgenos presentes entre los 14 legales.
 
 REGLAS DE FORMATO:
 Devuelve ÚNICAMENTE el código JSON, sin explicaciones ni texto adicional.
@@ -93,6 +101,8 @@ Esquema exacto:
   "yieldQuantity": 2,
   "yieldUnit": "raciones",
   "allergens": ["Gluten", "Lácteos"],
+  "presentation": "PRESENTACIÓN: Disposición cuidada en el envase de take away principal, salsa en tarrina y crujientes aparte.",
+  "importantNotes": "PUNTOS IMPORTANTES (SI LOS HAY): Dejar atemperar 2 min antes de tapar para evitar condensación, transportar en plano horizontal sin apilar más de 3 cajas.",
   "minimalistCard": {
     "miniComment": "Descripción sugerente y tentadora para la carta online o etiqueta del envase.",
     "summaryInstructions": "Pasos de cocina en el obrador para empaquetar.",
@@ -128,6 +138,7 @@ Esquema exacto:
   },
   "serviceDetails": {
     "presentation": "Embalaje y presentación en bolsa de reparto",
+    "importantNotes": "Puntos importantes take away: cadena de frío, transporte horizontal, regeneración",
     "servingTemp": "Temp de entrega",
     "cutlery": "Kit cubiertos biodegradables",
     "passTime": "15 min",
@@ -230,6 +241,18 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
                            data.platingInstructions || 
                            '';
 
+      const presentationNotes = data.presentation || 
+                                data.serviceDetails?.presentation || 
+                                data.minimalistCard?.presentation || 
+                                platingNotes || 
+                                '';
+
+      const importantNotesText = data.importantNotes || 
+                                 data.serviceDetails?.importantNotes || 
+                                 data.minimalistCard?.importantNotes || 
+                                 data.takeAwayDetails?.transportTips || 
+                                 '';
+
       // Construir detalles de Take Away si el JSON los incluye o si estamos en modo take away
       let finalTakeAwayDetails: TakeAwayDetails | undefined = undefined;
       if (data.takeAwayDetails || bridgeMode === 'takeaway') {
@@ -247,7 +270,7 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
             summaryText: rawHF.summaryText || clientDesc,
             heatingMethod: rawHF.heatingMethod || 'microwave',
             heatingInstructions: rawHF.heatingInstructions || (rawTA.heatingInstructions || 'Calentar 2 minutos a 750W en microondas con tapa entreabierta.'),
-            platingSteps: rawHF.platingSteps || (rawTA.platingSteps || platingNotes || 'Verter la salsa caliente y añadir los crujientes al final.'),
+            platingSteps: rawHF.platingSteps || (rawTA.platingSteps || presentationNotes || platingNotes || 'Verter la salsa caliente y añadir los crujientes al final.'),
             storageCustomerNotes: rawHF.storageCustomerNotes || 'Conservar refrigerado si no se consume al instante.'
           }
         };
@@ -267,16 +290,21 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
         subRecipes: subRecipes,
         videos: normalizeVideos(data.videos, data.sourceUrl || data.videoUrl),
         sourceUrl: data.sourceUrl || '',
-        platingInstructions: platingNotes,
+        presentation: presentationNotes,
+        platingInstructions: presentationNotes || platingNotes,
+        importantNotes: importantNotesText,
         extraAllergens: parsedAllergens,
         minimalistCard: {
           miniComment: clientDesc,
           summaryInstructions: data.minimalistCard?.summaryInstructions || '',
-          platingTips: platingNotes,
+          platingTips: presentationNotes || platingNotes,
+          presentation: presentationNotes,
+          importantNotes: importantNotesText,
           allergens: parsedAllergens
         },
         serviceDetails: {
-          presentation: data.serviceDetails?.presentation || '',
+          presentation: presentationNotes,
+          importantNotes: importantNotesText,
           servingTemp: data.serviceDetails?.servingTemp || '',
           cutlery: data.serviceDetails?.cutlery || '',
           passTime: data.serviceDetails?.passTime || '',

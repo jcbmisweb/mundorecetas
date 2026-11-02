@@ -85,6 +85,8 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   const [recipeVideos, setRecipeVideos] = useState<VideoLink[]>([]);
   const [isPublic, setIsPublic] = useState(false);
   const [platingInstructions, setPlatingInstructions] = useState('');
+  const [presentation, setPresentation] = useState('');
+  const [importantNotes, setImportantNotes] = useState('');
   const [extraAllergens, setExtraAllergens] = useState<Allergen[]>([]);
   const [serviceDetails, setServiceDetails] = useState<ServiceDetails>(emptyServiceDetails);
   const [recipeType, setRecipeType] = useState<'normal' | 'takeaway' | 'eventos' | 'pastry'>('normal');
@@ -195,6 +197,8 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         });
       }
       setPlatingInstructions(initialRecipe.platingInstructions || '');
+      setPresentation(initialRecipe.presentation || initialRecipe.platingInstructions || initialRecipe.serviceDetails?.presentation || '');
+      setImportantNotes(initialRecipe.importantNotes || initialRecipe.serviceDetails?.importantNotes || '');
       setExtraAllergens(initialRecipe.extraAllergens || []);
       setLinkedRecipeIds(initialRecipe?.linkedRecipeIds || []);
       setSubRecipes((initialRecipe.subRecipes || []).map(sr => ({
@@ -535,7 +539,14 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           videos: sr.videos || [],
           videoUrl: sr.videos && sr.videos.length > 0 ? sr.videos[0].url : (sr.videoUrl || undefined)
         })))), // Deep copy to ensure state is captured
-        platingInstructions, serviceDetails,
+        platingInstructions: presentation || platingInstructions,
+        presentation: presentation || platingInstructions,
+        importantNotes: importantNotes,
+        serviceDetails: {
+          ...serviceDetails,
+          presentation: presentation || platingInstructions,
+          importantNotes: importantNotes
+        },
         recipeType,
         pastryInfographic,
         takeAwayDetails: {
@@ -1651,9 +1662,12 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                  </div>
               </div>
            </div>
-           <div className="pt-10 border-t border-white/5">
-              <div className="flex justify-between items-center mb-4">
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Instrucciones de Emplatado y Acabado Final</label>
+           <div className="pt-10 border-t border-white/5 space-y-8">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} className="text-amber-500" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">Presentación y Puntos Importantes</span>
+                </div>
                 <button 
                   type="button" 
                   onClick={() => setEditingAllergenTarget('global')}
@@ -1663,7 +1677,41 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                   <span>Alérgenos Extra ({extraAllergens.length})</span>
                 </button>
               </div>
-              <textarea value={platingInstructions} onChange={e => setPlatingInstructions(e.target.value)} className="w-full bg-slate-900 border-2 border-dashed border-slate-700 rounded-[2rem] p-8 text-sm min-h-[150px] outline-none focus:border-amber-500 transition-colors font-serif" placeholder="Describe el paso final antes del pase..." />
+
+              {/* Apartado 1: PRESENTACIÓN */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
+                  <Sparkles size={14} className="text-amber-400" /> PRESENTACIÓN (Emplatado, Vajilla, Montaje y Acabado Final)
+                </label>
+                <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                  Describe la arquitectura del plato, soporte o vajilla, disposición ordenada de los elementos y acabado visual antes del pase.
+                </p>
+                <textarea 
+                  value={presentation} 
+                  onChange={e => {
+                    setPresentation(e.target.value);
+                    setPlatingInstructions(e.target.value);
+                  }} 
+                  className="w-full bg-slate-900 border-2 border-dashed border-amber-500/40 rounded-[2rem] p-6 text-sm min-h-[140px] outline-none focus:border-amber-400 transition-colors font-serif text-slate-100 placeholder:text-slate-600" 
+                  placeholder="Ej: Emplatar en plato hondo de cerámica artesanal. Disponer la crema de base en círculo, coronar con el solomillo al punto y salsear con el jugo reducido..." 
+                />
+              </div>
+
+              {/* Apartado 2: PUNTOS IMPORTANTES (SI LOS HAY) */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
+                  <AlertCircle size={14} className="text-amber-500" /> PUNTOS IMPORTANTES (SI LOS HAY)
+                </label>
+                <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                  Anotaciones críticas de cocción, temperaturas límite de pase, puntos de control sanitario, consejos de manipulación o regeneración.
+                </p>
+                <textarea 
+                  value={importantNotes} 
+                  onChange={e => setImportantNotes(e.target.value)} 
+                  className="w-full bg-slate-900 border-2 border-dashed border-slate-700 rounded-[2rem] p-6 text-sm min-h-[110px] outline-none focus:border-amber-500 transition-colors font-serif text-slate-100 placeholder:text-slate-600" 
+                  placeholder="Ej: Servir inmediatamente a 65ºC para evitar que la emulsión se corte. No recalentar en salamandra una vez montado. Comprobar ausencia de espinas..." 
+                />
+              </div>
            </div>
         </div>
 
@@ -2036,7 +2084,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                     Coste real limpio (con {quickAddProduct.wastePercentage}% merma):
                   </span>
                   <span className="font-mono font-black text-emerald-700 text-sm">
-                    {((parseFloat(String(quickAddProduct.pricePerUnit).replace(',', '.')) || 0) / (1 - (quickAddProduct.wastePercentage / 100))).toFixed(3).replace('.', ',')}€/{quickAddProduct.unit}
+                    {(((parseFloat(String(quickAddProduct.pricePerUnit).replace(',', '.')) || 0) / Math.max(0.01, 1 - ((quickAddProduct.wastePercentage || 0) / 100)))).toFixed(3).replace('.', ',')}€/{quickAddProduct.unit}
                   </span>
                 </div>
               )}
@@ -2217,7 +2265,9 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         recipeName={name}
         category={categories[0] || 'Cocina de Autor'}
         subRecipes={subRecipes}
-        platingInstructions={platingInstructions || serviceDetails.presentation}
+        platingInstructions={presentation || platingInstructions || serviceDetails.presentation}
+        presentation={presentation || platingInstructions || serviceDetails.presentation}
+        importantNotes={importantNotes || serviceDetails.importantNotes}
         takeAwayDetails={takeAwayDetails}
       />
     </div>

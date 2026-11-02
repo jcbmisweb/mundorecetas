@@ -34,14 +34,15 @@ const ALLERGEN_CODE_MAP: Record<string, Allergen> = {
 const REVERSE_ALLERGEN_MAP: Record<string, string> = Object.entries(ALLERGEN_CODE_MAP).reduce((acc, [code, name]) => ({ ...acc, [name]: code }), {});
 
 const parseSmartPrice = (val: any): number => {
-  if (typeof val === 'number') return val;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (!val || val === 'precio_no_disponible') return 0;
-  let s = val.toString().trim().replace(/[€\s]/g, '');
+  let s = String(val).trim().replace(/[€\s]/g, '');
   const lastComma = s.lastIndexOf(',');
   const lastDot = s.lastIndexOf('.');
   if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
   else if (lastDot > lastComma) s = s.replace(/,/g, '');
-  return parseFloat(s) || 0;
+  const num = parseFloat(s);
+  return isNaN(num) ? 0 : num;
 };
 
 export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({ 
@@ -728,7 +729,7 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
                   </td>
                   <td className="px-6 py-4 font-mono font-bold text-indigo-600">
                     {(() => {
-                      const numPrice = parseSmartPrice(product.pricePerUnit);
+                      const numPrice = Number(parseSmartPrice(product.pricePerUnit)) || 0;
                       return numPrice <= 0 ? (
                         <span className="text-[10px] text-slate-300">N/D</span>
                       ) : (
@@ -934,7 +935,7 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
                     {(() => {
                       const waste = editingProduct.wastePercentage || 0;
                       const factor = Math.max(0.01, 1 - (waste / 100));
-                      const cleanCost = parseSmartPrice(editingProduct.pricePerUnit) / factor;
+                      const cleanCost = (Number(parseSmartPrice(editingProduct.pricePerUnit)) || 0) / factor;
                       return `${cleanCost.toFixed(3).replace('.', ',')}€/${editingProduct.unit}`;
                     })()}
                   </span>

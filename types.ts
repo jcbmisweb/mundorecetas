@@ -68,12 +68,15 @@ export interface ServiceDetails {
   passTime: string;
   serviceType: string;
   clientDescription: string;
+  importantNotes?: string; // Puntos importantes (si los hay)
 }
 
 export interface MinimalistCard {
   miniComment?: string;
   summaryInstructions?: string;
   platingTips?: string;
+  presentation?: string; // Apartado PRESENTACIÓN
+  importantNotes?: string; // Puntos importantes (si los hay)
   allergens?: Allergen[];
 }
 
@@ -288,6 +291,8 @@ export interface Recipe {
   yieldUnit: string;
   subRecipes: SubRecipe[];
   platingInstructions: string;
+  presentation?: string; // Apartado PRESENTACIÓN (emplatado, vajilla y pase)
+  importantNotes?: string; // Apartado PUNTOS IMPORTANTES (si los hay)
   serviceDetails: ServiceDetails;
   extraAllergens?: Allergen[];
   minimalistCard?: MinimalistCard;

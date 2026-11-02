@@ -57,6 +57,9 @@ ${ings || '  • No especificados'}
 Instrucciones: ${sub.instructions || 'Técnica descrita en ficha.'}`;
     }).join('\n\n');
 
+    const presentationText = r.presentation || r.platingInstructions || r.serviceDetails?.presentation || 'Emplatado contemporáneo sobre vajilla artesanal.';
+    const importantNotesText = r.importantNotes || r.serviceDetails?.importantNotes || (r.takeAwayDetails?.isTakeAway && [r.takeAwayDetails?.packagingNotes, r.takeAwayDetails?.transportTips].filter(Boolean).join(' · ')) || '';
+
     return `NOMBRE DEL PLATO: ${r.name}
 CATEGORÍA: ${r.category || (r.categories ? r.categories.join(', ') : 'Cocina de Autor')}
 PAX / RACIONES: ${r.yieldQuantity} ${r.yieldUnit || 'pax'}
@@ -65,8 +68,13 @@ DESCRIPCIÓN COMERCIAL: "${r.minimalistCard?.miniComment || r.serviceDetails?.cl
 ELABORACIONES TÉCNICAS:
 ${elaboracionesText}
 
-EMPLATADO Y SERVICIO:
-${r.platingInstructions || r.serviceDetails?.presentation || 'Emplatado contemporáneo sobre vajilla artesanal.'}
+PRESENTACIÓN:
+${presentationText}
+
+PUNTOS IMPORTANTES (SI LOS HAY):
+${importantNotesText || 'Seguir protocolo y puntos críticos estándar de la receta.'}
+
+DATOS DE SERVICIO:
 Temperatura de servicio: ${r.serviceDetails?.servingTemp || 'Óptima de cocina'}
 Cubertería: ${r.serviceDetails?.cutlery || 'Estándar gastronómico'}
 ${r.takeAwayDetails?.isTakeAway ? `\nDETALLES DE TAKE AWAY / PACKAGING:\nEnvase: ${r.takeAwayDetails.packagingType || 'Envase kraft microondable'}\nConservación: ${r.takeAwayDetails.shelfLife || '48h'} (${r.takeAwayDetails.conservationTemp || '2-4ºC'})\nRegeneración comensal: ${r.takeAwayDetails.homeFinishing?.heatingInstructions || 'Calentar 2 min en microondas.'}` : ''}`;
@@ -557,10 +565,14 @@ REGLAS DE FORMATO:
   "yieldQuantity": 4, 
   "yieldUnit": "raciones",
   "allergens": ["Gluten", "Lácteos"],
+  "presentation": "PRESENTACIÓN: Instrucciones detalladas de emplatado, arquitectura del plato, vajilla seleccionada y acabado visual antes del pase.",
+  "importantNotes": "PUNTOS IMPORTANTES (SI LOS HAY): Puntos críticos de cocción, temperaturas límite de servicio, control sanitario, advertencias o consejos clave.",
   "minimalistCard": {
     "miniComment": "Descripción sugerente y comercial del plato (máximo 1-2 frases elegantes para carta, destacando texturas y matices).",
     "summaryInstructions": "1. Síntesis paso 1... 2. Síntesis paso 2... 3. Acabado...",
-    "platingTips": "Notas clave y directas de montaje y emplatado en pase."
+    "platingTips": "Notas clave y directas de montaje y emplatado en pase.",
+    "presentation": "Instrucciones de presentación para la ficha",
+    "importantNotes": "Puntos críticos o notas importantes si los hay"
   },
   "elaborations": [
     {
@@ -571,7 +583,8 @@ REGLAS DE FORMATO:
   ],
   "notes": "Puntos críticos o consejos de emplatado",
   "serviceDetails": {
-    "presentation": "Cómo emplatar",
+    "presentation": "Cómo emplatar y presentar en sala",
+    "importantNotes": "Puntos importantes de servicio si los hay",
     "servingTemp": "Temp ideal",
     "cutlery": "Cubiertos",
     "passTime": "Tiempo estimado",
@@ -581,6 +594,8 @@ REGLAS DE FORMATO:
 }
 
 REGLAS TÉCNICAS:
+- "presentation": Apartado fundamental de PRESENTACIÓN. Describe la vajilla, colocación y acabado.
+- "importantNotes": Apartado de PUNTOS IMPORTANTES (SI LOS HAY). Incluye temperaturas, puntos críticos y advertencias.
 - "yieldQuantity" es el Rendimiento (PAX), SIEMPRE numérico.
 - "yieldUnit" es la Unidad de Medida (ej: raciones, pax, personas).
 - "allergens": Array con los alérgenos presentes entre los 14 de declaración obligatoria: Gluten, Crustáceos, Huevos, Pescado, Cacahuetes, Soja, Lácteos, Frutos de cáscara, Apio, Mostaza, Sésamo, Sulfitos, Altramuces, Moluscos.
@@ -609,10 +624,13 @@ CRITERIOS CULINARIOS CRÍTICOS PARA TAKE AWAY:
    - Separar crujientes, tejas y hierbas frescas en bolsitas o envases secos aparte para coronar en casa en el último segundo.
    - Puntos de cocción adaptados (ej: pasta al dente -2 minutos; pescados al 85% para no quedar secos al regenerar).
 3. PACKAGING RECOMENDADO: Especificar envase (ej: cartón kraft termosellable microondable, tarrinas herméticas 50ml, caja ventilada para fritos).
-4. ENCARTE / INSTRUCCIONES PARA EL CLIENTE (CÓMO TERMINAR EN CASA):
+4. PRESENTACIÓN Y PUNTOS IMPORTANTES:
+   - PRESENTACIÓN: Disposición ordenada y cuidada en el recipiente principal y envases satélite.
+   - PUNTOS IMPORTANTES (SI LOS HAY): Consejos críticos de transporte (en plano, sin apilar en exceso), atemperado antes de cerrar para evitar condensación, tiempos de caducidad.
+5. ENCARTE / INSTRUCCIONES PARA EL CLIENTE (CÓMO TERMINAR EN CASA):
    - Explicar método de regeneración (Microondas, Horno, Sartén, Baño María o Consumo en Frío) con tiempos y potencia precisos.
    - Explicar el emplatado final en casa ("verter la salsa caliente", "añadir el crujiente reservado").
-5. ALÉRGENOS: Identificar con total rigor los alérgenos presentes entre los 14 legales.
+6. ALÉRGENOS: Identificar con total rigor los alérgenos presentes entre los 14 legales.
 
 REGLAS DE FORMATO:
 Devuelve ÚNICAMENTE el código JSON, sin explicaciones ni texto adicional.
@@ -623,10 +641,14 @@ Esquema exacto:
   "yieldQuantity": 2,
   "yieldUnit": "raciones",
   "allergens": ["Gluten", "Lácteos"],
+  "presentation": "PRESENTACIÓN: Disposición cuidada en el envase de take away principal, separación de salsa en tarrina y crujientes en bolsa seca.",
+  "importantNotes": "PUNTOS IMPORTANTES (SI LOS HAY): Dejar atemperar 2 min antes de cerrar para evitar vapor, transportar en plano horizontal, no apilar más de 3 cajas.",
   "minimalistCard": {
     "miniComment": "Descripción sugerente y tentadora para la carta online o etiqueta del envase.",
     "summaryInstructions": "Pasos de cocina en el obrador para empaquetar.",
-    "platingTips": "Instrucciones de disposición dentro del envase de transporte."
+    "platingTips": "Instrucciones de disposición dentro del envase de transporte.",
+    "presentation": "Presentación dentro del packaging",
+    "importantNotes": "Puntos críticos de take away si los hay"
   },
   "elaborations": [
     {
@@ -658,6 +680,7 @@ Esquema exacto:
   },
   "serviceDetails": {
     "presentation": "Embalaje y presentación en bolsa de reparto",
+    "importantNotes": "Puntos importantes take away: transporte horizontal, regeneración",
     "servingTemp": "Temp de entrega",
     "cutlery": "Kit cubiertos biodegradables",
     "passTime": "15 min",

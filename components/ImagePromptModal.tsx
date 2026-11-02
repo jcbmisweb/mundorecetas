@@ -12,6 +12,8 @@ interface Props {
   category?: string;
   subRecipes?: SubRecipe[];
   platingInstructions?: string;
+  presentation?: string;
+  importantNotes?: string;
   takeAwayDetails?: TakeAwayDetails;
 }
 
@@ -22,6 +24,8 @@ export const ImagePromptModal: React.FC<Props> = ({
   category = 'Cocina de Autor',
   subRecipes = [],
   platingInstructions = '',
+  presentation = '',
+  importantNotes = '',
   takeAwayDetails
 }) => {
   const [copied, setCopied] = useState(false);
@@ -38,6 +42,9 @@ export const ImagePromptModal: React.FC<Props> = ({
   }, [takeAwayDetails?.isTakeAway, isOpen]);
 
   if (!isOpen) return null;
+
+  const effectivePresentation = presentation || platingInstructions || 'Emplatado contemporáneo sobre vajilla artesanal.';
+  const effectiveImportantNotes = importantNotes || (takeAwayDetails?.isTakeAway && [takeAwayDetails?.packagingNotes, takeAwayDetails?.transportTips].filter(Boolean).join(' · ')) || '';
 
   // Extraer componentes e ingredientes para poblar el prompt
   const componentsList = subRecipes.length > 0
@@ -65,8 +72,12 @@ INFORMACIÓN DE LA FICHA TÉCNICA (COMIDA PARA LLEVAR / TAKE AWAY):
 - RECIPIENTE Y PACKAGING DE TRANSPORTE: ${packagingDesc}
 - ELEMENTOS Y ELABORACIONES DEL PLATO:
 ${componentsList}
-- DISPOSICIÓN DE LOS ELEMENTOS EN EL PACKAGING:
-${takeAwayDetails?.packagingNotes || platingInstructions || 'Base del plato dispuesta ordenadamente en el envase principal, salsa en tarrina hermética independiente y elementos crujientes en bolsita seca separada.'}
+
+PRESENTACIÓN (DISPOSICIÓN EN EL PACKAGING):
+${effectivePresentation}
+
+PUNTOS IMPORTANTES (SI LOS HAY):
+${effectiveImportantNotes || 'Disponer la base ordenada, no tapar mientras emita vapor excesivo para no condensar y mantener la salsa en tarrina separada.'}
 
 La composición debe combinar en una misma imagen dos representaciones coherentes del mismo plato dentro de su packaging y recipientes de transporte para llevar:
 
@@ -77,7 +88,7 @@ Estilo de dibujo culinario técnico dibujado a mano, con líneas de tinta fina y
 
 Mostrar el RECIPIENTE DE TAKE AWAY ABIERTO (caja rectangular de cartón kraft biodegradable de diseño contemporáneo o bowl ecológico para delivery), visualizando claramente la distribución interna:
 ${labelsList}
-- Recipiente principal abierto con la base y guarnición del plato dispuestas con mimo y pulcritud.
+- Recipiente principal abierto con la base y guarnición del plato dispuestas con mimo y pulcritud según el apartado PRESENTACIÓN.
 - Tarrina hermética pequeña para la salsa situada al lado del recipiente, con su tapadera.
 - Bolsita o contenedor pequeño separado para los elementos crujientes o hierbas frescas.
 - Pequeñas líneas finas con etiquetas elegantes señalando cada elemento del packaging y su contenido técnico.
@@ -89,7 +100,7 @@ Fotografía gastronómica hiperrealista de alta cocina para llevar (estilo gourm
 
 EL PLATO DEBE ESTAR DISPUESTO DIRECTAMENTE DENTRO DE SU RECIPIENTE DE TAKE AWAY ABIERTO:
 - El recipiente es un envase gastronómico ecológico de alta gama (caja de cartón kraft natural de diseño limpio, bowl de bagazo de caña o envase termosellable premium abierto).
-- La comida luce extremadamente fresca, jugosa, apetitosa y colocada con mimo dentro del recipiente, como en los mejores restaurantes gourmet con servicio a domicilio.
+- La comida luce extremadamente fresca, jugosa, apetitosa y colocada con mimo dentro del recipiente, respetando el apartado PRESENTACIÓN y los PUNTOS IMPORTANTES.
 - Al lado del envase principal abierto, mostrar la tarrina hermética de salsa abierta y destapada (dejando ver el brillo de la salsa), el elemento crujiente en su pequeña bolsita kraft abierta o recién espolvoreado, cubiertos ecológicos de madera pulida o bambú y una servilleta de papel kraft doblada con elegancia.
 - Al fondo, sutilmente desenfocada, una bolsa de papel kraft de reparto sin marcas comerciales.
 - REGLA CRÍTICA ESTRICTA: NO USAR PLATOS DE PORCELANA TRADICIONALES DE RESTAURANTE. La comida debe estar dentro del recipiente de take away para que se identifique inequívocamente como comida para llevar de calidad suprema.
@@ -113,8 +124,12 @@ INFORMACIÓN DE LA FICHA TÉCNICA:
 - CATEGORÍA: ${category}
 - COMPONENTES Y ELABORACIONES:
 ${componentsList}
-- EMPLATADO Y ACABADO:
-${platingInstructions || 'Emplatado contemporáneo refinado de alta gastronomía.'}
+
+PRESENTACIÓN:
+${effectivePresentation}
+
+PUNTOS IMPORTANTES (SI LOS HAY):
+${effectiveImportantNotes || 'Respetar los puntos de temperatura de pase y arquitectura visual del plato.'}
 
 La composición debe combinar en una misma imagen dos representaciones coherentes del mismo plato:
 

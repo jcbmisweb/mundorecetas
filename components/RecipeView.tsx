@@ -38,6 +38,7 @@ import {
   ArrowRight,
   Plus,
   Minus,
+  AlertCircle,
 } from "lucide-react";
 
 import { CategoryStripe } from "./CategoryStripe";
@@ -906,15 +907,36 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                     ))
                   )}
 
-                  {(recipe.minimalistCard?.platingTips ||
+                  {(recipe.presentation ||
+                    recipe.minimalistCard?.presentation ||
+                    recipe.minimalistCard?.platingTips ||
                     recipe.platingInstructions) && (
                     <div className="p-1.5 bg-indigo-50/70 rounded-lg border border-indigo-100 text-[7.5px] mt-1">
-                      <p className="font-black uppercase text-indigo-900 text-[6.5px] tracking-wider mb-0.5">
-                        Emplatado y Montaje:
+                      <p className="font-black uppercase text-indigo-900 text-[6.5px] tracking-wider mb-0.5 flex items-center gap-1">
+                        <Sparkles size={9} className="text-amber-500" />
+                        PRESENTACIÓN:
                       </p>
                       <p className="text-indigo-900 font-serif italic leading-snug">
-                        {recipe.minimalistCard?.platingTips ||
+                        {recipe.presentation ||
+                          recipe.minimalistCard?.presentation ||
+                          recipe.minimalistCard?.platingTips ||
                           recipe.platingInstructions}
+                      </p>
+                    </div>
+                  )}
+
+                  {(recipe.importantNotes ||
+                    recipe.serviceDetails?.importantNotes ||
+                    recipe.minimalistCard?.importantNotes) && (
+                    <div className="p-1.5 bg-amber-50/80 rounded-lg border border-amber-200 text-[7.5px] mt-1">
+                      <p className="font-black uppercase text-amber-950 text-[6.5px] tracking-wider mb-0.5 flex items-center gap-1">
+                        <AlertCircle size={9} className="text-amber-600" />
+                        PUNTOS IMPORTANTES (SI LOS HAY):
+                      </p>
+                      <p className="text-amber-950 font-serif italic leading-snug">
+                        {recipe.importantNotes ||
+                          recipe.serviceDetails?.importantNotes ||
+                          recipe.minimalistCard?.importantNotes}
                       </p>
                     </div>
                   )}
@@ -1109,6 +1131,83 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                 })}
               </div>
             </div>
+          </div>
+
+          {/* SECCIÓN: PRESENTACIÓN Y PUNTOS IMPORTANTES (SI LOS HAY) */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-5 break-inside-avoid">
+            {/* APARTADO: PRESENTACIÓN */}
+            <div
+              className={`${
+                (recipe.importantNotes ||
+                  recipe.serviceDetails?.importantNotes ||
+                  (recipe.takeAwayDetails?.isTakeAway &&
+                    (recipe.takeAwayDetails?.packagingNotes ||
+                      recipe.takeAwayDetails?.transportTips)))
+                  ? "md:col-span-7"
+                  : "md:col-span-12"
+              } bg-white border-2 border-slate-900 rounded-2xl p-4 shadow-xs flex flex-col justify-between`}
+            >
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                      <Sparkles size={14} />
+                    </div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                      PRESENTACIÓN
+                    </h3>
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                    {recipe.takeAwayDetails?.isTakeAway
+                      ? "Packaging & Montaje"
+                      : "Vajilla & Pase"}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-700 font-serif italic leading-relaxed whitespace-pre-wrap">
+                  {recipe.presentation ||
+                    recipe.platingInstructions ||
+                    recipe.serviceDetails?.presentation ||
+                    (recipe.takeAwayDetails?.isTakeAway
+                      ? "Disposición ordenada en el envase kraft principal, salsa en tarrina hermética separada y crujientes secos para el comensal."
+                      : "Emplatado equilibrado y limpio siguiendo los estándares gastronómicos de la receta.")}
+                </p>
+              </div>
+            </div>
+
+            {/* APARTADO: PUNTOS IMPORTANTES (SI LOS HAY) */}
+            {(recipe.importantNotes ||
+              recipe.serviceDetails?.importantNotes ||
+              (recipe.takeAwayDetails?.isTakeAway &&
+                (recipe.takeAwayDetails?.packagingNotes ||
+                  recipe.takeAwayDetails?.transportTips))) ? (
+              <div className="md:col-span-5 bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-amber-200 pb-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-bold">
+                        <AlertCircle size={14} />
+                      </div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-950">
+                        PUNTOS IMPORTANTES (SI LOS HAY)
+                      </h3>
+                    </div>
+                    <span className="text-[7.5px] font-black uppercase tracking-widest text-amber-800 bg-amber-200/70 px-1.5 py-0.5 rounded">
+                      Atención
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-950 font-medium leading-relaxed italic whitespace-pre-wrap">
+                    {recipe.importantNotes ||
+                      recipe.serviceDetails?.importantNotes ||
+                      [
+                        recipe.takeAwayDetails?.packagingNotes,
+                        recipe.takeAwayDetails?.transportTips,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* VÍDEOS Y ENLACES GENERALES DEL PLATO */}
@@ -1379,14 +1478,54 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
               </div>
             </div>
 
-            <div className="mt-4 bg-white p-5 rounded-2xl border border-slate-200">
-              <h4 className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                Protocolo de Emplatado y Acabado
-              </h4>
-              <p className="text-[10px] text-slate-600 font-medium leading-relaxed italic">
-                {recipe.platingInstructions ||
-                  "Seguir protocolo estándar de la categoría."}
-              </p>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-4">
+              <div
+                className={`${
+                  recipe.importantNotes ||
+                  recipe.serviceDetails?.importantNotes ||
+                  recipe.takeAwayDetails?.packagingNotes ||
+                  recipe.takeAwayDetails?.transportTips
+                    ? "md:col-span-7"
+                    : "md:col-span-12"
+                } bg-white p-5 rounded-2xl border border-slate-200`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles size={14} className="text-amber-500" />
+                  <h4 className="text-[9px] font-black text-slate-900 uppercase tracking-widest">
+                    PRESENTACIÓN
+                  </h4>
+                </div>
+                <p className="text-[10px] text-slate-600 font-medium leading-relaxed italic whitespace-pre-wrap">
+                  {recipe.presentation ||
+                    recipe.platingInstructions ||
+                    recipe.serviceDetails?.presentation ||
+                    "Seguir protocolo estándar de la categoría."}
+                </p>
+              </div>
+
+              {(recipe.importantNotes ||
+                recipe.serviceDetails?.importantNotes ||
+                recipe.takeAwayDetails?.packagingNotes ||
+                recipe.takeAwayDetails?.transportTips) && (
+                <div className="md:col-span-5 bg-amber-50/80 p-5 rounded-2xl border border-amber-200/90">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle size={14} className="text-amber-600" />
+                    <h4 className="text-[9px] font-black text-amber-950 uppercase tracking-widest">
+                      PUNTOS IMPORTANTES (SI LOS HAY)
+                    </h4>
+                  </div>
+                  <p className="text-[10px] text-amber-900 font-medium leading-relaxed italic whitespace-pre-wrap">
+                    {recipe.importantNotes ||
+                      recipe.serviceDetails?.importantNotes ||
+                      [
+                        recipe.takeAwayDetails?.packagingNotes,
+                        recipe.takeAwayDetails?.transportTips,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* CHECKLIST DE MISE EN PLACE - SOLO AL FINAL DE LA FICHA DE SERVICIO */}
@@ -1794,7 +1933,13 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
         category={recipe.category}
         subRecipes={recipe.subRecipes}
         platingInstructions={
-          recipe.platingInstructions || recipe.serviceDetails?.presentation
+          recipe.presentation || recipe.platingInstructions || recipe.serviceDetails?.presentation
+        }
+        presentation={
+          recipe.presentation || recipe.platingInstructions || recipe.serviceDetails?.presentation
+        }
+        importantNotes={
+          recipe.importantNotes || recipe.serviceDetails?.importantNotes
         }
         takeAwayDetails={recipe.takeAwayDetails}
       />
