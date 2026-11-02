@@ -337,6 +337,8 @@ export interface ProRecipe {
   concept: string; // Concepto e intención gastronómica
   starProduct: string; // Producto estrella, origen, calibre, temporada
   storytelling: string; // Discurso para sala / cliente
+  creatorLogo?: string; // Logo específico del profesor / chef autor
+  chefNotes?: string; // Anotaciones y observaciones de taller
   heroPhoto?: string; // Foto hiperrealista de pase
   sketchPhoto?: string; // Ilustración técnica del emplatado
   sensoryProfile: {

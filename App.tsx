@@ -1955,6 +1955,7 @@ function App() {
               <ProRecipePrintView
                 recipe={currentProRecipe}
                 settings={settings}
+                appUser={appUser}
                 onBack={() => setViewState('PRO_WORKSHOP')}
                 onEdit={() => setViewState('PRO_EDITOR')}
               />

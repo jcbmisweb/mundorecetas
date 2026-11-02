@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useMemo } from 'react';
-import { ProRecipe, AppSettings, Allergen, RUBRIC_CRITERIA, DEFAULT_PCC_PLAN } from '../types';
+import { ProRecipe, AppSettings, AppUser, Allergen, RUBRIC_CRITERIA, DEFAULT_PCC_PLAN } from '../types';
 import { ProSensoryRadarChart } from './ProSensoryRadarChart';
 import { AllergenIcon } from './AllergenIcon';
 import { 
   Printer, ArrowLeft, Award, Layers, Thermometer, Clock, Scale, 
   CheckCircle2, XCircle, AlertTriangle, ShieldCheck, History, DollarSign,
   Compass, ChefHat, Sparkles, Image as ImageIcon, Check, Calendar, Sun, BellRing,
-  FileCheck, BookOpen
+  FileCheck, BookOpen, PenTool
 } from 'lucide-react';
 
 interface ProRecipePrintViewProps {
   recipe: ProRecipe;
   settings: AppSettings;
+  appUser?: AppUser | null;
   onBack: () => void;
   onEdit?: () => void;
 }
@@ -19,6 +20,7 @@ interface ProRecipePrintViewProps {
 export const ProRecipePrintView: React.FC<ProRecipePrintViewProps> = ({
   recipe,
   settings,
+  appUser,
   onBack,
   onEdit
 }) => {
@@ -49,6 +51,10 @@ export const ProRecipePrintView: React.FC<ProRecipePrintViewProps> = ({
   };
 
   const currentStatus = statusLabels[recipe.status] || statusLabels.development;
+
+  // Logos del Centro y del Profesor para el encabezado
+  const centerLogo = settings.instituteLogo || appUser?.instituteLogo;
+  const teacherLogo = recipe.creatorLogo || appUser?.teacherLogo || settings.teacherLogo || 'https://lh3.googleusercontent.com/d/1DkCOqFGdw3PZbyNUnTQNgeaAGjBfv1_e';
 
   // Resumen global de alérgenos unificados de todas las sub-elaboraciones (Reglamento UE 1169/2011)
   const allDishAllergens = useMemo(() => {
@@ -157,53 +163,87 @@ export const ProRecipePrintView: React.FC<ProRecipePrintViewProps> = ({
       >
         
         {/* ========================================================================= */}
-        {/* SECCIÓN 1: IDENTIDAD, CONCEPTO, PERFIL SENSORIAL Y REGISTRO VISUAL        */}
+        {/* PÁGINA 1: IDENTIDAD, CONCEPTO, PERFIL SENSORIAL, FOTO Y ANOTACIONES       */}
         {/* ========================================================================= */}
         <section className="mb-5 print:mb-4">
           
-          {/* CABECERA MAESTRA: IDENTIFICACIÓN Y CONTROL OPERATIVO */}
+          {/* CABECERA MAESTRA: LOGOS DEL CENTRO Y DEL PROFESOR AL PRINCIPIO */}
           <header className="border-b-2 border-slate-900 pb-2.5 mb-2.5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-[9px] font-mono tracking-widest uppercase text-slate-500 font-bold mb-1">
-                  <span>ALTA GASTRONOMÍA · DOCUMENTO OPERATIVO CONTROLADO</span>
-                  <span>·</span>
-                  <span className="text-amber-700 font-black">
-                    {recipe.useLevel === 'basic' ? 'NIVEL 1: BÁSICO OPERATIVO' : 'NIVEL 2: I+D AVANZADO'}
-                  </span>
-                </div>
-                <h1 className="text-2xl print:text-xl font-black tracking-tight text-slate-950 font-serif leading-tight">
-                  {recipe.name}
-                </h1>
-                {recipe.technicalName && (
-                  <p className="text-xs print:text-[11px] font-medium text-slate-600 italic mt-0.5">
-                    {recipe.technicalName}
-                  </p>
+            
+            {/* FILA 1 DE ENCABEZADO: LOGOS INSTITUCIONALES AL COMIENZO */}
+            <div className="flex items-center justify-between gap-3 pb-2 mb-2 border-b border-slate-200">
+              
+              {/* Logo del Centro Educativo (Izquierda) */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                {centerLogo ? (
+                  <img 
+                    src={centerLogo} 
+                    alt="Logo Centro" 
+                    className="h-12 print:h-11 w-auto max-w-[130px] object-contain"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold font-serif text-sm border border-slate-700 shadow-xs">
+                      IES
+                    </div>
+                    <div className="leading-tight">
+                      <span className="block text-[7.5px] font-mono font-bold text-slate-400 uppercase tracking-widest">CENTRO EDUCATIVO</span>
+                      <span className="block text-xs font-black text-slate-900 uppercase">{settings.instituteName || 'IES La Flota'}</span>
+                      <span className="block text-[7px] text-slate-500 font-mono">Hostelería y Turismo · Murcia</span>
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {/* Logos institucionales / autor */}
-              <div className="flex items-center gap-3 shrink-0">
-                {settings.instituteLogo ? (
+              {/* Título de Clasificación / Identificación Central */}
+              <div className="text-center flex-1 px-2">
+                <span className="inline-block text-[8px] font-mono font-bold tracking-[0.22em] text-slate-500 uppercase">
+                  ALTA GASTRONOMÍA · DOCUMENTO OPERATIVO CONTROLADO
+                </span>
+                <div className="flex items-center justify-center gap-2 mt-0.5">
+                  <span className="text-[10px] font-mono font-black text-slate-800 uppercase tracking-wider">
+                    TALLER I+D GASTRONÓMICO
+                  </span>
+                  <span className="text-slate-300">·</span>
+                  <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-black uppercase tracking-wider ${
+                    recipe.useLevel === 'basic' ? 'bg-slate-200 text-slate-800' : 'bg-amber-100 text-amber-950 border border-amber-300'
+                  }`}>
+                    {recipe.useLevel === 'basic' ? 'NIVEL 1: BÁSICO OPERATIVO' : 'NIVEL 2: I+D AVANZADO'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Logo del Profesor / Chef Autor (Derecha) */}
+              <div className="flex items-center justify-end gap-2.5 text-right shrink-0">
+                <div className="leading-tight hidden sm:block print:block">
+                  <span className="block text-[7.5px] font-mono font-bold text-slate-400 uppercase tracking-widest">CHEF AUTOR / TUTOR</span>
+                  <span className="block text-xs font-black text-slate-900 uppercase truncate max-w-[150px]">{recipe.responsible || 'Juan Codina Barranco'}</span>
+                  <span className="block text-[7px] text-amber-700 font-mono font-bold">Taller I+D Michelin</span>
+                </div>
+                {teacherLogo ? (
                   <img 
-                    src={settings.instituteLogo} 
-                    alt="IES Logo" 
-                    className="h-10 print:h-8 w-auto max-w-[85px] object-contain"
+                    src={teacherLogo} 
+                    alt="Logo Profesor / Chef" 
+                    className="h-12 print:h-11 w-auto max-w-[100px] object-contain rounded-xl border border-slate-200 bg-white p-0.5 shadow-xs print:shadow-none"
                   />
                 ) : (
-                  <div className="text-right">
-                    <div className="text-[8.5px] font-mono font-bold text-slate-400">CENTRO EDUCATIVO</div>
-                    <div className="text-xs font-black text-slate-800">{settings.instituteName || 'IES La Flota'}</div>
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-sm border border-amber-600 shadow-xs">
+                    JCB
                   </div>
                 )}
-                {settings.teacherLogo && (
-                  <img 
-                    src={settings.teacherLogo} 
-                    alt="Profesor Logo" 
-                    className="h-10 print:h-8 w-auto max-w-[85px] object-contain border-l border-slate-200 pl-2.5"
-                  />
-                )}
               </div>
+            </div>
+
+            {/* FILA 2 DE ENCABEZADO: NOMBRE DEL PLATO Y NOMBRE TÉCNICO */}
+            <div className="pt-0.5">
+              <h1 className="text-2xl print:text-xl font-black tracking-tight text-slate-950 font-serif leading-tight">
+                {recipe.name}
+              </h1>
+              {recipe.technicalName && (
+                <p className="text-xs print:text-[11px] font-medium text-slate-600 italic mt-0.5">
+                  {recipe.technicalName}
+                </p>
+              )}
             </div>
 
             {/* Faja de metadatos de control técnico */}
@@ -228,7 +268,7 @@ export const ProRecipePrintView: React.FC<ProRecipePrintViewProps> = ({
               </div>
               <div className="bg-slate-50 p-1.5 rounded border border-slate-200 col-span-2 sm:col-span-1 print:col-span-1">
                 <span className="block text-[8px] font-mono uppercase tracking-wider text-slate-500 font-bold">Responsable</span>
-                <span className="font-medium text-slate-800 text-[10px] truncate block">{recipe.responsible || 'Chef Creativo'}</span>
+                <span className="font-medium text-slate-800 text-[10px] truncate block">{recipe.responsible || 'Juan Codina Barranco'}</span>
               </div>
             </div>
           </header>
@@ -309,7 +349,7 @@ export const ProRecipePrintView: React.FC<ProRecipePrintViewProps> = ({
               </div>
             </div>
 
-            {/* Fila 2: Registro Visual del Emplatado Objetivo (Fotografía y/o Croquis) */}
+            {/* Fila 2: Registro Visual del Emplatado Objetivo (Fotografía grande protagonista) */}
             {(recipe.heroPhoto || recipe.sketchPhoto) && (
               <div className="mt-2.5 pt-2 border-t border-slate-200">
                 <div className="flex items-center justify-between mb-1.5">
@@ -324,53 +364,98 @@ export const ProRecipePrintView: React.FC<ProRecipePrintViewProps> = ({
                 </div>
 
                 {recipe.heroPhoto && recipe.sketchPhoto ? (
-                  <div className="grid grid-cols-2 print:grid-cols-2 gap-2">
-                    <div className="bg-slate-50/80 p-1.5 rounded-lg border border-slate-200 flex flex-col items-center">
+                  <div className="grid grid-cols-2 print:grid-cols-2 gap-2.5">
+                    <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-200 flex flex-col items-center">
                       <img
                         src={recipe.heroPhoto}
                         alt="Fotografía de pase"
-                        className="w-full max-h-40 print:max-h-36 h-32 object-contain rounded"
+                        className="w-full h-52 sm:h-56 print:h-52 object-contain rounded-lg"
                       />
-                      <span className="text-[7.5px] text-center text-slate-500 mt-1 font-mono uppercase">
+                      <span className="text-[8px] text-center text-slate-500 mt-1 font-mono uppercase font-bold">
                         Fotografía Real de Pase
                       </span>
                     </div>
-                    <div className="bg-slate-50/80 p-1.5 rounded-lg border border-slate-200 flex flex-col items-center">
+                    <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-200 flex flex-col items-center">
                       <img
                         src={recipe.sketchPhoto}
                         alt="Croquis técnico"
-                        className="w-full max-h-40 print:max-h-36 h-32 object-contain rounded"
+                        className="w-full h-52 sm:h-56 print:h-52 object-contain rounded-lg"
                       />
-                      <span className="text-[7.5px] text-center text-slate-500 mt-1 font-mono uppercase">
+                      <span className="text-[8px] text-center text-slate-500 mt-1 font-mono uppercase font-bold">
                         Croquis Técnico / Esquema
                       </span>
                     </div>
                   </div>
                 ) : recipe.heroPhoto ? (
-                  <div className="bg-slate-50/80 p-1.5 rounded-lg border border-slate-200 flex flex-col items-center">
+                  <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200 flex flex-col items-center">
                     <img
                       src={recipe.heroPhoto}
                       alt={recipe.name}
-                      className="w-full max-h-44 print:max-h-40 h-36 object-contain rounded"
+                      className="w-full h-64 sm:h-72 print:h-64 max-h-[300px] object-contain rounded-lg shadow-xs print:shadow-none"
                     />
-                    <span className="text-[8px] text-center text-slate-500 mt-1 font-mono uppercase">
+                    <span className="text-[8.5px] text-center text-slate-500 mt-1.5 font-mono uppercase font-bold">
                       Fotografía de Emplatado Objetivo y Composición
                     </span>
                   </div>
                 ) : recipe.sketchPhoto ? (
-                  <div className="bg-slate-50/80 p-1.5 rounded-lg border border-slate-200 flex flex-col items-center">
+                  <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200 flex flex-col items-center">
                     <img
                       src={recipe.sketchPhoto}
                       alt={recipe.name}
-                      className="w-full max-h-44 print:max-h-40 h-36 object-contain rounded"
+                      className="w-full h-64 sm:h-72 print:h-64 max-h-[300px] object-contain rounded-lg shadow-xs print:shadow-none"
                     />
-                    <span className="text-[8px] text-center text-slate-500 mt-1 font-mono uppercase">
+                    <span className="text-[8.5px] text-center text-slate-500 mt-1.5 font-mono uppercase font-bold">
                       Croquis / Esquema Técnico de Montaje
                     </span>
                   </div>
                 ) : null}
               </div>
             )}
+
+            {/* Fila 3: Espacio para Anotaciones y Observaciones de Taller */}
+            <div className="mt-2.5 pt-2 border-t border-slate-200 pro-avoid-break">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[8.5px] font-mono uppercase tracking-widest text-slate-800 font-black flex items-center gap-1.5">
+                  <PenTool size={11} className="text-amber-700" />
+                  Espacio para Anotaciones y Observaciones de Taller
+                </span>
+                <span className="text-[7.5px] font-mono text-slate-400 uppercase tracking-wider">
+                  Registro operativo en servicio y ajustes organolépticos
+                </span>
+              </div>
+
+              {recipe.chefNotes && (
+                <div className="p-2 bg-amber-50/50 rounded-lg border border-amber-200/70 mb-1.5">
+                  <span className="text-[7.5px] font-mono font-bold text-amber-900 uppercase block mb-0.5">
+                    Notas Registradas en Ficha:
+                  </span>
+                  <p className="text-[8.5px] text-slate-800 italic leading-snug whitespace-pre-line">
+                    {recipe.chefNotes}
+                  </p>
+                </div>
+              )}
+
+              {/* Cuadrícula pautada de líneas para apuntes durante la clase práctica o servicio */}
+              <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-200 space-y-1.5 text-[8px] font-mono">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-600 uppercase shrink-0 w-32">Ajustes textura / sabor:</span>
+                  <div className="flex-1 border-b border-dashed border-slate-300 h-3"></div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-600 uppercase shrink-0 w-32">Puntos críticos / pase:</span>
+                  <div className="flex-1 border-b border-dashed border-slate-300 h-3"></div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-600 uppercase shrink-0 w-32">Propuesta de mejora:</span>
+                  <div className="flex-1 border-b border-dashed border-slate-300 h-3"></div>
+                </div>
+
+                <div className="pt-1 mt-1 border-t border-slate-200 flex items-center justify-between text-[7px] text-slate-500 font-mono">
+                  <span>Firma Alumno / Cocinero: ________________________________</span>
+                  <span>Vº Bº Profesor / Chef Tutor: ________________________________</span>
+                </div>
+              </div>
+            </div>
 
           </div>
         </section>
@@ -379,7 +464,7 @@ export const ProRecipePrintView: React.FC<ProRecipePrintViewProps> = ({
         <div className="pro-page-break print:block hidden" />
 
         {/* ========================================================================= */}
-        {/* SECCIÓN 2: NIVEL 2 · FICHAS DE ELABORACIÓN (SUB-COMPONENTES TÉCNICOS)     */}
+        {/* PÁGINA 2: NIVEL 2 · FICHAS DE ELABORACIÓN (SUB-COMPONENTES TÉCNICOS)      */}
         {/* ========================================================================= */}
         {recipe.components && recipe.components.length > 0 && (
           <section className="mb-5 print:mb-4">
@@ -595,7 +680,7 @@ export const ProRecipePrintView: React.FC<ProRecipePrintViewProps> = ({
         <div className="pro-page-break print:block hidden" />
 
         {/* ========================================================================= */}
-        {/* SECCIÓN 3: MONTAJE, CONTROL DE CALIDAD, RÚBRICA Y APPCC (RD 3484/2000)   */}
+        {/* PÁGINA 3: MONTAJE, CONTROL DE CALIDAD, RÚBRICA Y APPCC (RD 3484/2000)     */}
         {/* ========================================================================= */}
         <div className="space-y-3.5 print:space-y-3">
           

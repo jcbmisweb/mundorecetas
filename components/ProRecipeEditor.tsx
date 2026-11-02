@@ -471,6 +471,17 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-mono"
                   />
                 </div>
+
+                <div className="pt-2">
+                  <label className="block text-[10px] font-mono text-slate-500 uppercase">Anotaciones y Observaciones del Chef / Taller (Portada)</label>
+                  <textarea
+                    rows={2}
+                    value={recipe.chefNotes || ''}
+                    onChange={e => updateRecipeField('chefNotes', e.target.value)}
+                    placeholder="Observaciones de cata, ajustes de textura o incidencias del taller para imprimir en la primera hoja..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 resize-none"
+                  />
+                </div>
               </div>
             </div>
           </div>
