@@ -1,18 +1,21 @@
 
 import React, { useState } from 'react';
-import { Recipe, AppSettings, SubRecipe, Ingredient, AppUser, TakeAwayDetails } from '../types';
+import { Recipe, AppSettings, SubRecipe, Ingredient, AppUser, TakeAwayDetails, Product, Allergen } from '../types';
 import { normalizeVideos, sanitizeVideoUrl } from '../lib/videoUtils';
 import { isLiquidIngredient } from '../lib/unitUtils';
+import { matchProductInCatalog, reconcileRecipeWithCatalog } from '../lib/productUtils';
+import { calculateIngredientCost } from '../lib/costUtils';
 import { ArrowLeft, Sparkles, Copy, Check, FileJson, AlertCircle, ShoppingBag, Utensils, Box, Clock } from 'lucide-react';
 
 interface AIBridgeProps {
   settings: AppSettings;
   appUser: AppUser | null;
+  productDatabase?: Product[];
   onBack: () => void;
   onImport: (recipe: Recipe) => void | Promise<void>;
 }
 
-export const AIBridge: React.FC<AIBridgeProps> = ({ settings, appUser, onBack, onImport }) => {
+export const AIBridge: React.FC<AIBridgeProps> = ({ settings, appUser, productDatabase, onBack, onImport }) => {
   const [bridgeMode, setBridgeMode] = useState<'standard' | 'takeaway'>('standard');
   const [jsonInput, setJsonInput] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
@@ -222,14 +225,28 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
         instructions: elab.instructions || '',
         photos: [],
         videos: normalizeVideos(elab.videos, elab.videoUrl),
-        ingredients: (elab.ingredients || []).map((ing: any, iIdx: number) => ({
-          id: `ing_${Date.now()}_${idx}_${iIdx}`,
-          name: (ing.name || '').toUpperCase(),
-          quantity: String(ing.quantity || '0'),
-          unit: ing.unit || 'kg',
-          allergens: [], 
-          cost: 0
-        }))
+        ingredients: (elab.ingredients || []).map((ing: any, iIdx: number) => {
+          const ingName = (ing.name || '').toUpperCase().trim();
+          const matched = (productDatabase && productDatabase.length > 0) ? matchProductInCatalog(ingName, productDatabase) : undefined;
+          const unit = ing.unit || matched?.unit || 'kg';
+          const pricePerUnit = matched?.pricePerUnit || 0;
+          const baseUnit = matched?.unit;
+          const weightPerUnit = matched?.weightPerUnit;
+          const allergens = matched?.allergens || [];
+          const cost = calculateIngredientCost(String(ing.quantity || '0'), unit, pricePerUnit, baseUnit, weightPerUnit);
+          return {
+            id: `ing_${Date.now()}_${idx}_${iIdx}`,
+            name: ingName,
+            quantity: String(ing.quantity || '0'),
+            unit,
+            allergens,
+            pricePerUnit,
+            baseUnit,
+            weightPerUnit,
+            category: matched?.category,
+            cost: cost || 0
+          };
+        })
       }));
 
       const clientDesc = data.minimalistCard?.miniComment || 
@@ -315,8 +332,12 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
         lastModified: Date.now()
       };
 
+      const reconciledRecipe = (productDatabase && productDatabase.length > 0)
+        ? reconcileRecipeWithCatalog(newRecipe, productDatabase)
+        : newRecipe;
+
       setIsProcessing(true);
-      await onImport(newRecipe);
+      await onImport(reconciledRecipe);
       setJsonInput(''); 
     } catch (err: any) {
       console.error("Parse or save error:", err);

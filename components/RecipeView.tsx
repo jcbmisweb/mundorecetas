@@ -6,9 +6,11 @@ import {
   ALLERGEN_LIST,
   AppUser,
   isUserOwner,
+  Product,
 } from "../types";
 import { formatScaledQuantity } from "../lib/unitUtils";
 import { transformDriveUrl } from "../lib/googleDriveService";
+import { matchProductInCatalog } from "../lib/productUtils";
 import {
   Printer,
   ArrowLeft,
@@ -57,6 +59,7 @@ interface RecipeViewProps {
   onUpgradeToPro?: (recipe: Recipe) => void;
   onDuplicate?: (recipe: Recipe) => void;
   allRecipes?: Recipe[];
+  productDatabase?: Product[];
   onSelectRecipe?: (recipe: Recipe) => void;
 }
 
@@ -111,6 +114,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
   onUpgradeToPro,
   onDuplicate,
   allRecipes,
+  productDatabase,
   onSelectRecipe,
 }) => {
   const [dynamicPax, setDynamicPax] = useState<number>(
@@ -157,15 +161,28 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
       if (norm) set.add(norm);
     };
 
+    let catalog = productDatabase;
+    if (!catalog || catalog.length === 0) {
+      try {
+        const cached = localStorage.getItem('cached_products');
+        if (cached) catalog = JSON.parse(cached);
+      } catch {}
+    }
+
     recipe.subRecipes?.forEach((sub) => {
       sub.ingredients?.forEach((ing) => {
         ing.allergens?.forEach((a) => addAllergen(a));
+        // Verificación activa con el catálogo para alérgenos aparejados
+        if (catalog && catalog.length > 0 && ing.name && !ing.isInternalPrep && !ing.isNonProduct) {
+          const matched = matchProductInCatalog(ing.name, catalog);
+          matched?.allergens?.forEach((a) => addAllergen(a));
+        }
       });
     });
     recipe.extraAllergens?.forEach((a) => addAllergen(a));
     recipe.minimalistCard?.allergens?.forEach((a) => addAllergen(a));
     return Array.from(set);
-  }, [recipe]);
+  }, [recipe, productDatabase]);
 
   const displayBadges = useMemo(() => {
     const list: string[] = [];
@@ -232,6 +249,14 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
   };
 
   const consolidatedIngredients = useMemo(() => {
+    let catalog = productDatabase;
+    if (!catalog || catalog.length === 0) {
+      try {
+        const cached = localStorage.getItem('cached_products');
+        if (cached) catalog = JSON.parse(cached);
+      } catch {}
+    }
+
     const list: {
       name: string;
       quantity: string;
@@ -247,16 +272,23 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
           ing.baseUnit,
           ing.name,
         );
+        let ingAllergens = Array.isArray(ing.allergens) ? [...ing.allergens] : [];
+        if (catalog && catalog.length > 0 && !ing.isInternalPrep && !ing.isNonProduct) {
+          const matched = matchProductInCatalog(ing.name, catalog);
+          if (matched?.allergens && matched.allergens.length > 0) {
+            ingAllergens = Array.from(new Set([...ingAllergens, ...matched.allergens]));
+          }
+        }
         list.push({
           name: ing.name.trim(),
           quantity: scaled.quantity,
           unit: scaled.unit,
-          allergens: ing.allergens,
+          allergens: ingAllergens,
         });
       });
     });
     return list;
-  }, [recipe, paxRatio]);
+  }, [recipe, paxRatio, productDatabase]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-2 md:p-4 print:p-0 print:bg-white font-sans text-slate-900">

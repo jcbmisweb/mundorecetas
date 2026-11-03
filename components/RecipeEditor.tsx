@@ -13,7 +13,7 @@ import { calculateIngredientCost } from '../lib/costUtils';
 import { compressImage, compressHeroBannerImage, getImageAspect } from '../lib/imageUtils';
 import { uploadFileToDrive, transformDriveUrl, GOOGLE_DRIVE_FOLDER_ID, sanitizeFileName } from '../lib/googleDriveService';
 import { ImagePromptModal } from './ImagePromptModal';
-import { findSimilarProducts } from '../lib/productUtils';
+import { findSimilarProducts, matchProductInCatalog, reconcileIngredientWithCatalog, reconcileRecipeWithCatalog } from '../lib/productUtils';
 import { 
   Save, X, Plus, Trash2, Image as ImageIcon, 
   Book, Utensils, Thermometer, Info, Database, MessageSquare, ChevronDown, CheckCircle2,
@@ -160,6 +160,21 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     return existingFamilies.filter(f => f.includes(search));
   }, [existingFamilies, familySearch]);
 
+  const currentRecipeAllergens = useMemo(() => {
+    const set = new Set<Allergen>();
+    subRecipes.forEach(sub => {
+      sub.ingredients?.forEach(ing => {
+        ing.allergens?.forEach(a => set.add(a));
+        if (ing.name && !ing.isInternalPrep && !ing.isNonProduct) {
+          const matched = matchProductInCatalog(ing.name, productDatabase);
+          matched?.allergens?.forEach(a => set.add(a));
+        }
+      });
+    });
+    extraAllergens.forEach(a => set.add(a));
+    return Array.from(set);
+  }, [subRecipes, extraAllergens, productDatabase]);
+
   useEffect(() => {
     if (initialRecipe) {
       setName(initialRecipe.name);
@@ -204,18 +219,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       setSubRecipes((initialRecipe.subRecipes || []).map(sr => ({
         ...sr,
         videos: normalizeVideos(sr.videos, sr.videoUrl),
-        ingredients: (sr.ingredients || []).map(ing => {
-          const product = productDatabase.find(p => p.name.toUpperCase() === ing.name.toUpperCase());
-          const baseUnit = ing.baseUnit || (product ? product.unit : undefined);
-          const weightPerUnit = ing.weightPerUnit || (product ? product.weightPerUnit : undefined);
-          
-          return {
-            ...ing,
-            baseUnit,
-            weightPerUnit,
-            cost: calculateIngredientCost(ing.quantity, ing.unit, ing.pricePerUnit, baseUnit, weightPerUnit)
-          };
-        }),
+        ingredients: (sr.ingredients || []).map(ing => reconcileIngredientWithCatalog(ing, productDatabase)),
         photos: sr.photos || ((sr as any).photo ? [(sr as any).photo] : [])
       })));
     } else {
@@ -245,6 +249,20 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       if (lowerVal.length > 1) {
         const matches = productDatabase.filter(p => p.name.toLowerCase().includes(lowerVal)).slice(0, 50);
         setSuggestions({ idx: ingIdx, list: matches });
+
+        // Auto-reconciliación instantánea con el catálogo si el nombre coincide exactamente o por alta similitud
+        const autoMatch = matchProductInCatalog(value as string, productDatabase);
+        if (autoMatch) {
+          const currentAllergens = Array.isArray(ing.allergens) ? ing.allergens : [];
+          const productAllergens = Array.isArray(autoMatch.allergens) ? autoMatch.allergens : [];
+          ing.allergens = Array.from(new Set([...currentAllergens, ...productAllergens])) as Allergen[];
+          if (!ing.baseUnit) ing.baseUnit = autoMatch.unit;
+          if (!ing.unit || ing.unit === 'kg') ing.unit = autoMatch.unit || ing.unit;
+          if (ing.pricePerUnit === undefined || ing.pricePerUnit === 0) ing.pricePerUnit = autoMatch.pricePerUnit || 0;
+          if (!ing.weightPerUnit) ing.weightPerUnit = autoMatch.weightPerUnit;
+          if (!ing.category) ing.category = autoMatch.category;
+          ing.cost = calculateIngredientCost(ing.quantity, ing.unit, ing.pricePerUnit, ing.baseUnit, ing.weightPerUnit);
+        }
       } else setSuggestions(null);
     }
     setSubRecipes(newSubs);
@@ -539,8 +557,10 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         subRecipes: JSON.parse(JSON.stringify(subRecipes.map(sr => {
           const validSubVideos = (sr.videos || []).filter(v => Boolean(sanitizeVideoUrl(v.url)));
           const validSubUrl = validSubVideos.length > 0 ? validSubVideos[0].url : (sanitizeVideoUrl(sr.videoUrl) || undefined);
+          const reconciledIngs = (sr.ingredients || []).map(ing => reconcileIngredientWithCatalog(ing, productDatabase));
           return {
             ...sr,
+            ingredients: reconciledIngs,
             videos: validSubVideos,
             videoUrl: validSubUrl
           };
@@ -561,7 +581,11 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           recipeType: recipeType,
           pastryInfographic: pastryInfographic
         },
-        extraAllergens,
+        extraAllergens: currentRecipeAllergens,
+        minimalistCard: {
+          ...(initialRecipe?.minimalistCard || {}),
+          allergens: currentRecipeAllergens
+        },
         linkedRecipeIds,
         lastModified: Date.now()
       } as any);
@@ -1254,6 +1278,51 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           </div>
         </div>
 
+        {/* Tira en vivo de Control de Alérgenos de la Ficha */}
+        <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 text-slate-900 shrink-0">
+              <div className="p-2 bg-rose-50 text-rose-600 rounded-xl border border-rose-200">
+                <AlertOctagon size={18} />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider block text-slate-800">
+                  Alérgenos del Plato ({currentRecipeAllergens.length})
+                </span>
+                <span className="text-[8.5px] text-slate-400 font-medium">
+                  Detectados en tiempo real desde los ingredientes y el inventario
+                </span>
+              </div>
+            </div>
+            {currentRecipeAllergens.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 items-center pl-1">
+                {currentRecipeAllergens.map(a => (
+                  <span
+                    key={a}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-rose-800 border border-rose-200 rounded-xl text-[9.5px] font-black uppercase shadow-2xs"
+                  >
+                    <AllergenIcon allergen={a} size={13} />
+                    <span>{a}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
+                <Check size={13} className="text-emerald-600" />
+                <span>100% Libre de alérgenos de declaración obligatoria</span>
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditingAllergenTarget('global')}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shrink-0 shadow-xs flex items-center gap-1.5 self-start sm:self-center cursor-pointer"
+          >
+            <AlertOctagon size={12} className="text-amber-400" />
+            <span>Gestionar Alérgenos Globales</span>
+          </button>
+        </div>
+
         <div className="space-y-6">
            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
               {subRecipes.map((sub, idx) => (
@@ -1300,6 +1369,14 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                                     type="text" 
                                     value={ing.name} 
                                     onChange={e => updateIngredient(activeTab, iIdx, 'name', e.target.value)} 
+                                    onBlur={() => {
+                                      if (ing.name && ing.name.trim()) {
+                                        const reconciled = reconcileIngredientWithCatalog(ing, productDatabase);
+                                        const n = [...subRecipes];
+                                        n[activeTab].ingredients[iIdx] = reconciled;
+                                        setSubRecipes(n);
+                                      }
+                                    }}
                                     className={`w-full pl-3 pr-24 py-3 text-xs font-black rounded-xl outline-none uppercase placeholder:opacity-30 border transition-all ${
                                       ing.name && !isResolved 
                                         ? 'bg-amber-50 border-amber-200 ring-2 ring-amber-100' 

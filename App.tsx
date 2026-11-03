@@ -56,7 +56,7 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ShieldAlert, LogOut, Loader2, Server, CheckCircle2, AlertCircle, RefreshCw, X, Database, Wifi, WifiOff, Cloud, CloudOff } from 'lucide-react';
-import { normalizeText, extractDifferenceNote } from './lib/productUtils';
+import { normalizeText, extractDifferenceNote, matchProductInCatalog, reconcileRecipeWithCatalog, reconcileIngredientWithCatalog } from './lib/productUtils';
 import { calculateIngredientCost } from './lib/costUtils';
 import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal, seedLocalDatabase, saveProRecipeLocal, deleteProRecipeLocal, seedProRecipesLocal } from './db/dexieDB';
 import { 
@@ -845,7 +845,7 @@ function App() {
       };
     });
 
-    return {
+    const migrated: Recipe = {
       ...r,
       name: r.name || 'Sin título',
       yieldQuantity: r.yieldQuantity || 4,
@@ -868,6 +868,11 @@ function App() {
       },
       platingInstructions: legacy.platingInstructions || ''
     };
+
+    if (productDatabase && productDatabase.length > 0) {
+      return reconcileRecipeWithCatalog(migrated, productDatabase);
+    }
+    return migrated;
   };
 
   const handleEdit = (recipe: Recipe) => {
@@ -898,12 +903,17 @@ function App() {
       const currentUid = user?.id || appUser?.uid || 'user_admin';
       const userWorkspace = appUser?.workspaceId || currentUid;
 
+      // Reconciliación automática y blindada de todos los ingredientes con el catálogo
+      const reconciled = (productDatabase && productDatabase.length > 0)
+        ? reconcileRecipeWithCatalog(recipe, productDatabase)
+        : recipe;
+
       const recipeToSave: Recipe = {
-        ...recipe,
-        workspaceId: recipe.workspaceId || userWorkspace,
-        isPublic: recipe.isPublic || false,
-        creator: appUser?.teacherName || appUser?.displayName || recipe.creator || settings.teacherName || 'Profesor',
-        creatorLogo: appUser?.teacherLogo || recipe.creatorLogo || '',
+        ...reconciled,
+        workspaceId: reconciled.workspaceId || userWorkspace,
+        isPublic: reconciled.isPublic || false,
+        creator: appUser?.teacherName || appUser?.displayName || reconciled.creator || settings.teacherName || 'Profesor',
+        creatorLogo: appUser?.teacherLogo || reconciled.creatorLogo || '',
         lastModified: Date.now(),
         synced: false
       };
@@ -1959,6 +1969,7 @@ function App() {
                   onUpgradeToPro={handleImportFromAcademic}
                   onDuplicate={handleDuplicateRecipe}
                   allRecipes={recipes}
+                  productDatabase={productDatabase}
                   onSelectRecipe={(r) => { setCurrentRecipe(r); setViewState('VIEWER'); }}
                 />
               </ErrorBoundary>
@@ -1977,6 +1988,7 @@ function App() {
               <AIBridge 
                 settings={settings}
                 appUser={appUser}
+                productDatabase={productDatabase}
                 onBack={() => setViewState('DASHBOARD')}
                 onImport={async (recipe) => {
                   await handleSave(recipe);
