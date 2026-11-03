@@ -328,6 +328,7 @@ export interface ProRecipe {
   workspaceId?: string;
   createdAt: number;
   lastModified: number;
+  synced?: boolean;
 
   // Nivel 1 · Identidad del plato
   name: string; // Nombre gastronómico

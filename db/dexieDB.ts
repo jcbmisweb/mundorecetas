@@ -1,10 +1,11 @@
 import Dexie, { Table } from 'dexie';
-import { Recipe, Product, MenuPlan } from '../types';
+import { Recipe, Product, MenuPlan, ProRecipe } from '../types';
 
 export class GastronomyLocalDB extends Dexie {
   recipes!: Table<Recipe, string>;
   products!: Table<Product, string>;
   menuPlans!: Table<MenuPlan, string>;
+  proRecipes!: Table<ProRecipe, string>;
 
   constructor() {
     super('GastronomyLocalDB');
@@ -12,6 +13,12 @@ export class GastronomyLocalDB extends Dexie {
       recipes: 'id, name, category, synced, lastModified',
       products: 'id, name, category, synced, lastModified',
       menuPlans: 'id, title, date, synced, lastModified'
+    });
+    this.version(2).stores({
+      recipes: 'id, name, category, synced, lastModified',
+      products: 'id, name, category, synced, lastModified',
+      menuPlans: 'id, title, date, synced, lastModified',
+      proRecipes: 'id, name, code, status, synced, lastModified'
     });
   }
 }
@@ -31,6 +38,33 @@ export const saveRecipeLocal = async (recipe: Recipe, isSynced: boolean = false)
     await localDB.recipes.put(itemToSave);
   } catch (err) {
     console.warn("Could not save recipe to Dexie:", err);
+  }
+};
+
+/**
+ * Saves a pro recipe (Taller I+D) into IndexedDB locally.
+ */
+export const saveProRecipeLocal = async (proRecipe: ProRecipe, isSynced: boolean = false): Promise<void> => {
+  const itemToSave: ProRecipe = {
+    ...proRecipe,
+    lastModified: proRecipe.lastModified || Date.now(),
+    synced: isSynced
+  };
+  try {
+    await localDB.proRecipes.put(itemToSave);
+  } catch (err) {
+    console.warn("Could not save pro recipe to Dexie:", err);
+  }
+};
+
+/**
+ * Deletes a pro recipe from IndexedDB locally.
+ */
+export const deleteProRecipeLocal = async (id: string): Promise<void> => {
+  try {
+    await localDB.proRecipes.delete(id);
+  } catch (err) {
+    console.warn("Could not delete pro recipe from Dexie:", err);
   }
 };
 
@@ -68,15 +102,18 @@ export const saveMenuPlanLocal = async (plan: MenuPlan, isSynced: boolean = fals
 export const getStorageBreakdown = async () => {
   try {
     const allRecipes = await localDB.recipes.toArray();
-    const online = allRecipes.filter(r => r.synced === true).length;
-    const offline = allRecipes.filter(r => r.synced === false).length;
+    const allPro = await localDB.proRecipes.toArray();
+    const online = allRecipes.filter(r => r.synced === true).length + allPro.filter(p => p.synced === true).length;
+    const offline = allRecipes.filter(r => r.synced === false).length + allPro.filter(p => p.synced === false).length;
     return {
-      total: allRecipes.length,
+      total: allRecipes.length + allPro.length,
+      recipes: allRecipes.length,
+      proRecipes: allPro.length,
       online,
       offline
     };
   } catch (e) {
-    return { total: 0, online: 0, offline: 0 };
+    return { total: 0, online: 0, offline: 0, recipes: 0, proRecipes: 0 };
   }
 };
 
@@ -85,14 +122,16 @@ export const getStorageBreakdown = async () => {
  */
 export const getUnsyncedLocalData = async () => {
   const unsyncedRecipes = await localDB.recipes.filter(r => r.synced === false).toArray();
+  const unsyncedPro = await localDB.proRecipes.filter(p => p.synced === false).toArray();
   const unsyncedProducts = await localDB.products.filter(p => p.synced === false).toArray();
   const unsyncedPlans = await localDB.menuPlans.filter(m => m.synced === false).toArray();
 
   return {
     recipes: unsyncedRecipes,
+    proRecipes: unsyncedPro,
     products: unsyncedProducts,
     menuPlans: unsyncedPlans,
-    totalCount: unsyncedRecipes.length + unsyncedProducts.length + unsyncedPlans.length
+    totalCount: unsyncedRecipes.length + unsyncedPro.length + unsyncedProducts.length + unsyncedPlans.length
   };
 };
 
@@ -102,10 +141,10 @@ export const getUnsyncedLocalData = async () => {
 export const seedLocalDatabase = async (
   recipesList: Recipe[],
   productsList: Product[],
-  menusList: MenuPlan[] = []
+  menusList: MenuPlan[] = [],
+  proList: ProRecipe[] = []
 ) => {
   if (recipesList.length > 0) {
-    // Preserve local unsynced status
     const existing = await localDB.recipes.toArray();
     const existingMap = new Map(existing.map(r => [r.id, r]));
     const preparedRecipes = recipesList.map(r => {
@@ -123,5 +162,26 @@ export const seedLocalDatabase = async (
   if (menusList.length > 0) {
     await localDB.menuPlans.bulkPut(menusList.map(m => ({ ...m, synced: m.synced ?? true })));
   }
+  if (proList.length > 0) {
+    await seedProRecipesLocal(proList);
+  }
 };
+
+/**
+ * Seeds or updates pro recipes in local IndexedDB without overwriting unsynced modifications.
+ */
+export const seedProRecipesLocal = async (proList: ProRecipe[]) => {
+  if (!proList || proList.length === 0) return;
+  const existingPro = await localDB.proRecipes.toArray();
+  const existingProMap = new Map(existingPro.map(p => [p.id, p]));
+  const preparedPro = proList.map(p => {
+    const localItem = existingProMap.get(p.id);
+    if (localItem && localItem.synced === false) {
+      return { ...p, synced: false };
+    }
+    return { ...p, synced: p.synced ?? true };
+  });
+  await localDB.proRecipes.bulkPut(preparedPro);
+};
+
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ProRecipe, ProFamilyType, ProRecipeStatus, ProComponentElaboration,
   ProIngredientItem, ProProcessStep, Allergen, ALLERGEN_LIST, AppSettings,
@@ -61,12 +61,46 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
     setHasUnsavedChanges(true);
   };
 
+  const recipeRef = useRef(recipe);
+  const hasUnsavedRef = useRef(hasUnsavedChanges);
+  useEffect(() => {
+    recipeRef.current = recipe;
+    hasUnsavedRef.current = hasUnsavedChanges;
+  }, [recipe, hasUnsavedChanges]);
+
   const handleSave = () => {
     onSave(recipe);
     setHasUnsavedChanges(false);
     setSaveSuccessMsg(true);
     setTimeout(() => setSaveSuccessMsg(false), 3000);
   };
+
+  const handleBack = () => {
+    if (hasUnsavedChanges) {
+      onSave(recipe);
+      setHasUnsavedChanges(false);
+    }
+    onBack();
+  };
+
+  // Guardado automático en segundo plano para que nunca se pierda trabajo
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const timer = setTimeout(() => {
+      onSave(recipe);
+      setHasUnsavedChanges(false);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [recipe, hasUnsavedChanges, onSave]);
+
+  // Respaldo de seguridad al desmontar / salir del editor
+  useEffect(() => {
+    return () => {
+      if (hasUnsavedRef.current) {
+        onSave(recipeRef.current);
+      }
+    };
+  }, [onSave]);
 
   // Helper: recalculate baker's percentage for a component's ingredients
   const recalculateBakersPercentages = (ingredients: ProIngredientItem[]): ProIngredientItem[] => {
@@ -120,8 +154,8 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
       <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 sm:px-8 py-3 flex items-center justify-between shadow-xl">
         <div className="flex items-center gap-3">
           <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all border border-slate-700"
+            onClick={handleBack}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all border border-slate-700 cursor-pointer"
           >
             <ArrowLeft size={14} /> Volver
           </button>
@@ -201,7 +235,13 @@ export const ProRecipeEditor: React.FC<ProRecipeEditorProps> = ({
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => {
+                if (hasUnsavedChanges) {
+                  onSave(recipe);
+                  setHasUnsavedChanges(false);
+                }
+                setActiveTab(tab.id as any);
+              }}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all shrink-0 ${
                 activeTab === tab.id
                   ? 'bg-amber-500/10 border border-amber-500/40 text-amber-300 shadow-md'

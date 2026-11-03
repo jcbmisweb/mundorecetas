@@ -58,7 +58,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ShieldAlert, LogOut, Loader2, Server, CheckCircle2, AlertCircle, RefreshCw, X, Database, Wifi, WifiOff, Cloud, CloudOff } from 'lucide-react';
 import { normalizeText, extractDifferenceNote } from './lib/productUtils';
 import { calculateIngredientCost } from './lib/costUtils';
-import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal, seedLocalDatabase } from './db/dexieDB';
+import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal, seedLocalDatabase, saveProRecipeLocal, deleteProRecipeLocal, seedProRecipesLocal } from './db/dexieDB';
 import { 
   subscribeSyncStatus, 
   executeCloudSync, 
@@ -371,16 +371,32 @@ function App() {
       try {
         const proSnap = await getDocs(collection(db, 'proRecipes'));
         proLoaded = proSnap.docs.map(d => ({ id: d.id, ...d.data() } as ProRecipe));
+        if (proLoaded.length === 0) {
+          const altSnap = await getDocs(collection(db, 'pro_recipes'));
+          proLoaded = altSnap.docs.map(d => ({ id: d.id, ...d.data() } as ProRecipe));
+        }
         if (proLoaded.length > 0) {
-          setProRecipes(proLoaded);
-          try { localStorage.setItem('cached_pro_recipes', JSON.stringify(proLoaded)); } catch {}
+          setProRecipes(prev => {
+            const remoteMap = new Map(proLoaded.map(p => [p.id, p]));
+            const merged = [...proLoaded];
+            prev.forEach(localP => {
+              if (!remoteMap.has(localP.id) || localP.synced === false) {
+                const idx = merged.findIndex(p => p.id === localP.id);
+                if (idx >= 0) merged[idx] = localP;
+                else merged.push(localP);
+              }
+            });
+            try { localStorage.setItem('cached_pro_recipes', JSON.stringify(merged)); } catch {}
+            return merged;
+          });
+          await seedProRecipesLocal(proLoaded);
         }
       } catch (err) {
         console.warn("Firestore proRecipes getDocs warning:", err);
       }
 
       // Seed Dexie DB
-      seedLocalDatabase(cleanRecipes, extractedProducts, mLoaded);
+      seedLocalDatabase(cleanRecipes, extractedProducts, mLoaded, proLoaded);
     } catch (e) {
       console.warn("Error refreshing all data:", e);
     }
@@ -448,6 +464,22 @@ function App() {
 
         const localMenus = await localDB.menuPlans.toArray();
         if (localMenus.length > 0) setSavedMenus(localMenus);
+
+        const localPro = await localDB.proRecipes.toArray();
+        if (localPro.length > 0) {
+          setProRecipes(localPro);
+        } else {
+          try {
+            const cached = localStorage.getItem('cached_pro_recipes');
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setProRecipes(parsed);
+                await seedProRecipesLocal(parsed);
+              }
+            }
+          } catch {}
+        }
 
         // Verificación de auto-separación tras carga inicial
         const currentRecs = localRecipes.length > 0 ? localRecipes.map(ensureRecipeType) : [];
@@ -737,14 +769,23 @@ function App() {
     const unsubPro = onSnapshot(collection(db, 'proRecipes'), (snapshot) => {
       const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ProRecipe));
       if (loaded.length > 0) {
-        setProRecipes(loaded);
-        try { localStorage.setItem('cached_pro_recipes', JSON.stringify(loaded)); } catch {}
-      } else {
-        setProRecipes(prev => prev.length > 0 ? prev : INITIAL_PRO_RECIPES);
+        setProRecipes(prev => {
+          const remoteMap = new Map(loaded.map(p => [p.id, p]));
+          const merged = [...loaded];
+          prev.forEach(localP => {
+            if (!remoteMap.has(localP.id) || localP.synced === false) {
+              const idx = merged.findIndex(p => p.id === localP.id);
+              if (idx >= 0) merged[idx] = localP;
+              else merged.push(localP);
+            }
+          });
+          try { localStorage.setItem('cached_pro_recipes', JSON.stringify(merged)); } catch {}
+          return merged;
+        });
+        seedProRecipesLocal(loaded);
       }
     }, (err) => {
       console.warn("Firestore proRecipes onSnapshot warning:", err);
-      setProRecipes(prev => prev.length > 0 ? prev : INITIAL_PRO_RECIPES);
     });
 
     return () => {
@@ -1074,34 +1115,98 @@ function App() {
       }
     };
 
+    handleSaveProRecipe(newPro);
     setCurrentProRecipe(newPro);
     setViewState('PRO_EDITOR');
   };
 
   const handleSaveProRecipe = async (updated: ProRecipe) => {
     try {
-      const toSave = {
+      const toSave: ProRecipe = {
         ...updated,
-        lastModified: Date.now()
+        lastModified: Date.now(),
+        synced: false
       };
-      await setDoc(doc(db, 'pro_recipes', toSave.id), toSave, { merge: true });
-      setProRecipes(prev => [toSave, ...prev.filter(p => p.id !== toSave.id)]);
-      try {
-        localStorage.setItem('cached_pro_recipes', JSON.stringify([toSave, ...proRecipes.filter(p => p.id !== toSave.id)]));
-      } catch (e) {}
+
+      // 1. Guardar de forma inmediata en el estado de React y localStorage (0ms)
+      setProRecipes(prev => {
+        const next = [toSave, ...prev.filter(p => p.id !== toSave.id)];
+        try {
+          localStorage.setItem('cached_pro_recipes', JSON.stringify(next));
+        } catch (e) {
+          console.warn("localStorage cached_pro_recipes error:", e);
+        }
+        return next;
+      });
       setCurrentProRecipe(toSave);
+
+      // 2. Guardar prioritariamente en Dexie IndexedDB en el disco local del PC
+      await saveProRecipeLocal(toSave, false);
+
+      // 3. Sincronización en la nube (Firestore) en segundo plano
+      (async () => {
+        try {
+          if (navigator.onLine && !getIsQuotaExceeded()) {
+            // Limpiar valores undefined para que Firestore no rechace el payload
+            const cleanToSave = JSON.parse(JSON.stringify(toSave));
+
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout de sincronización Firebase')), 10000)
+            );
+
+            await Promise.race([
+              Promise.all([
+                setDoc(doc(db, 'proRecipes', cleanToSave.id), cleanToSave, { merge: true }),
+                setDoc(doc(db, 'pro_recipes', cleanToSave.id), cleanToSave, { merge: true })
+              ]),
+              timeoutPromise
+            ]);
+
+            // Marcar como sincronizado localmente
+            await saveProRecipeLocal(cleanToSave, true);
+            setProRecipes(prev => prev.map(p => p.id === cleanToSave.id ? { ...p, synced: true } : p));
+          }
+        } catch (syncErr: any) {
+          const msg = syncErr?.message || String(syncErr);
+          if (msg.includes('Quota') || msg.includes('quota') || syncErr?.code === 'resource-exhausted') {
+            console.warn('⚡ Límite de cuota diaria de Firestore alcanzado. La ficha I+D queda 100% segura en Local.');
+            setIsQuotaExceeded(true);
+          } else {
+            console.warn('Sincronización de ficha I+D con Firebase en segundo plano:', syncErr);
+          }
+        }
+      })();
     } catch (err: any) {
-      console.error("Error saving pro recipe:", err);
+      console.error("Error al guardar ficha I+D:", err);
+      setProRecipes(prev => [updated, ...prev.filter(p => p.id !== updated.id)]);
+      try {
+        await saveProRecipeLocal(updated, false);
+      } catch {}
     }
   };
 
   const handleDeleteProRecipe = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'pro_recipes', id));
-      setProRecipes(prev => prev.filter(p => p.id !== id));
-      try {
-        localStorage.setItem('cached_pro_recipes', JSON.stringify(proRecipes.filter(p => p.id !== id)));
-      } catch (e) {}
+      setProRecipes(prev => {
+        const next = prev.filter(p => p.id !== id);
+        try {
+          localStorage.setItem('cached_pro_recipes', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      await deleteProRecipeLocal(id);
+
+      if (navigator.onLine && !getIsQuotaExceeded()) {
+        try {
+          await Promise.all([
+            deleteDoc(doc(db, 'proRecipes', id)),
+            deleteDoc(doc(db, 'pro_recipes', id))
+          ]);
+        } catch (syncErr) {
+          console.warn("Firestore delete pro recipe warning:", syncErr);
+        }
+      }
     } catch (err: any) {
       console.error("Error deleting pro recipe:", err);
     }
