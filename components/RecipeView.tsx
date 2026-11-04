@@ -261,6 +261,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
       name: string;
       quantity: string;
       unit: string;
+      notes?: string;
       allergens?: Allergen[];
     }[] = [];
     recipe.subRecipes?.forEach((sub) => {
@@ -283,6 +284,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
           name: ing.name.trim(),
           quantity: scaled.quantity,
           unit: scaled.unit,
+          notes: ing.notes,
           allergens: ingAllergens,
         });
       });
@@ -880,7 +882,12 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                       {consolidatedIngredients.map((ing, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/50">
                           <td className="py-0.5 font-bold uppercase tracking-tight text-slate-900 pr-1">
-                            {ing.name}
+                            <span>{ing.name}</span>
+                            {ing.notes && (
+                              <span className="block text-[7px] text-amber-800 font-medium normal-case italic">
+                                ({ing.notes})
+                              </span>
+                            )}
                           </td>
                           <td className="py-0.5 text-right font-black text-slate-900 whitespace-nowrap">
                             {ing.quantity}

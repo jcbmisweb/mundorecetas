@@ -44,7 +44,7 @@ REGLAS DE FORMATO:
   "elaborations": [
     {
       "name": "Nombre de la elaboración (ej: Masa, Salsa, Principal)",
-      "ingredients": [{"name": "Producto", "quantity": "100", "unit": "g|kg|ml|l|ud"}],
+      "ingredients": [{"name": "BACALAO", "quantity": "0.960", "unit": "kg", "notes": "Lomo fresco desespinado (6 unidades de 160 g)"}],
       "instructions": "Pasos detallados..."
     }
   ],
@@ -63,6 +63,7 @@ REGLAS DE FORMATO:
 REGLAS TÉCNICAS:
 - "presentation": Apartado fundamental de PRESENTACIÓN (vajilla, disposición y pase).
 - "importantNotes": Apartado de PUNTOS IMPORTANTES (SI LOS HAY) (temperatura, advertencias críticas).
+- "notes" EN INGREDIENTES: Usa el campo "notes" para cualquier aclaración, corte, peso por unidad, calibre o especificación gastronómica (ej: "Lomo fresco desespinado (6 unidades de 160 g)"), dejando en "name" la denominación limpia del producto (ej: "BACALAO") para favorecer el casamiento con el inventario.
 - "yieldQuantity" es el Rendimiento (PAX), SIEMPRE numérico.
 - "yieldUnit" es la Unidad de Medida (ej: raciones, pax, personas).
 - REGLA CRÍTICA DE UNIDADES: Ingredientes líquidos (leche, aceite, agua, vinos, caldos, nata, vinagre, etc.) deben expresarse SIEMPRE en volumen ('l' o 'ml'), NUNCA en 'kg' ni 'g'. Los sólidos en 'kg' o 'g'. Unidades sueltas en 'ud'.
@@ -114,7 +115,7 @@ Esquema exacto:
   "elaborations": [
     {
       "name": "BASE O ELEMENTO PRINCIPAL (PRE-COCCIÓN AL 85%)",
-      "ingredients": [{"name": "Producto", "quantity": "100", "unit": "g|kg|ml|l|ud"}],
+      "ingredients": [{"name": "BACALAO", "quantity": "0.960", "unit": "kg", "notes": "Lomo fresco desespinado (6 unidades de 160 g)"}],
       "instructions": "Cocción cuidada para que no se pase en el transporte o regeneración..."
     },
     {
@@ -234,11 +235,13 @@ RECETA O IDEA A ADAPTAR PARA TAKE AWAY:
           const weightPerUnit = matched?.weightPerUnit;
           const allergens = matched?.allergens || [];
           const cost = calculateIngredientCost(String(ing.quantity || '0'), unit, pricePerUnit, baseUnit, weightPerUnit);
+          const notes = ing.notes || ing.specification || ing.clarification || ing.note || '';
           return {
             id: `ing_${Date.now()}_${idx}_${iIdx}`,
             name: ingName,
             quantity: String(ing.quantity || '0'),
             unit,
+            notes,
             allergens,
             pricePerUnit,
             baseUnit,

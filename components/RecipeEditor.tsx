@@ -19,7 +19,7 @@ import {
   Book, Utensils, Thermometer, Info, Database, MessageSquare, ChevronDown, CheckCircle2,
   ChefHat, Users, Camera, DatabaseZap, Check, HelpCircle, AlertOctagon, Sparkles,
   ShoppingBag, Box, Clock, Scissors, Flame, ArrowRight, AlertCircle, RefreshCw,
-  Ban, Percent, Truck, Search, Filter
+  Ban, Percent, Truck, Search, Filter, FileText
 } from 'lucide-react';
 
 interface RecipeEditorProps {
@@ -119,6 +119,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   const [familySearch, setFamilySearch] = useState('');
   const [showFamilyList, setShowFamilyList] = useState(false);
   const [linkedRecipeSearch, setLinkedRecipeSearch] = useState('');
+  const [openNotesMap, setOpenNotesMap] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
 
   const filteredAndSortedRecipesForLinking = useMemo(() => {
@@ -1543,7 +1544,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                                  className="col-span-1 text-[9px] font-black text-slate-400 uppercase bg-transparent border-b border-transparent focus:border-slate-200 outline-none transition-all" 
                                  placeholder="ud"
                                />
-                               <div className="col-span-1 flex justify-center items-center">
+                               <div className="col-span-1 flex justify-center items-center gap-1">
                                  <button 
                                    type="button" 
                                    onClick={() => setEditingAllergenTarget({ subIdx: activeTab, ingIdx: iIdx })}
@@ -1555,9 +1556,51 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                                      <span className="text-[8px] font-mono leading-none">{ing.allergens.length}</span>
                                    )}
                                  </button>
+                                 <button
+                                   type="button"
+                                   onClick={() => {
+                                     const key = `${activeTab}_${iIdx}`;
+                                     setOpenNotesMap(prev => ({ ...prev, [key]: !prev[key] }));
+                                   }}
+                                   className={`px-2 py-1.5 rounded-xl border transition-all flex items-center gap-1 ${
+                                     ing.notes 
+                                       ? 'border-amber-400 bg-amber-50 text-amber-900 font-black shadow-xs' 
+                                       : 'border-slate-100 text-slate-300 hover:border-slate-300 hover:text-slate-600'
+                                   }`}
+                                   title={ing.notes ? `Aclaración: "${ing.notes}"` : "Añadir aclaración / especificación (ej: corte, formato, unidades de 160g)"}
+                                 >
+                                   <FileText size={13} className={ing.notes ? "text-amber-600" : "text-slate-400"} />
+                                   {ing.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
+                                 </button>
                                </div>
                                <span className="col-span-2 text-right font-mono font-black text-indigo-600 text-xs flex items-center justify-end">{ing.cost?.toFixed(2).replace('.', ',')}€</span>
                                <button onClick={() => { const n = [...subRecipes]; n[activeTab].ingredients.splice(iIdx, 1); setSubRecipes(n); }} className="col-span-1 text-slate-200 hover:text-red-500 flex justify-center items-center transition-colors"><Trash2 size={16}/></button>
+
+                               {/* Campo Desplegable de Aclaración / Especificación del Ingrediente */}
+                               {(openNotesMap[`${activeTab}_${iIdx}`] || ing.notes) && (
+                                 <div className="col-span-12 ml-2 mt-1 p-2 bg-amber-50/80 border border-amber-200/90 rounded-xl flex items-center gap-2 transition-all shadow-2xs">
+                                   <span className="text-[9px] font-black uppercase text-amber-800 shrink-0 flex items-center gap-1">
+                                     📝 Aclaración:
+                                   </span>
+                                   <input
+                                     type="text"
+                                     value={ing.notes || ''}
+                                     onChange={e => updateIngredient(activeTab, iIdx, 'notes', e.target.value)}
+                                     placeholder="Ej: LOMO DE BACALAO FRESCO DESESPINADO (6 UNIDADES DE 160 G)..."
+                                     className="w-full bg-white border border-amber-200 px-2.5 py-1 text-xs font-bold text-slate-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-400 placeholder:italic"
+                                   />
+                                   {ing.notes && (
+                                     <button
+                                       type="button"
+                                       onClick={() => updateIngredient(activeTab, iIdx, 'notes', '')}
+                                       className="text-amber-600 hover:text-rose-600 p-1 rounded-md"
+                                       title="Borrar aclaración"
+                                     >
+                                       <X size={12} />
+                                     </button>
+                                   )}
+                                 </div>
+                               )}
                             </div>
                           );
                         })}

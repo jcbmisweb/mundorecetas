@@ -50,7 +50,7 @@ export const PromptHub: React.FC<PromptHubProps> = ({
     }
 
     const elaboracionesText = r.subRecipes.map((sub, idx) => {
-      const ings = (sub.ingredients || []).map(i => `  • ${i.name}: ${i.quantity} ${i.unit}`).join('\n');
+      const ings = (sub.ingredients || []).map(i => `  • ${i.name}${i.notes ? ` (${i.notes})` : ''}: ${i.quantity} ${i.unit}`).join('\n');
       return `Elaboración ${idx + 1}: ${sub.name}
 Ingredientes:
 ${ings || '  • No especificados'}
