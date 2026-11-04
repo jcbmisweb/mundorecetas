@@ -2,7 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAuthenticated() {
+    // ------------------------------------------------------------------------
+    // FUNCIONES AUXILIARES Y DE AUTENTICACIÓN
+    // ------------------------------------------------------------------------
+
+    function isSignedIn() {
       return request.auth != null;
     }
 
@@ -16,56 +20,220 @@ service cloud.firestore {
       ];
     }
 
-    function isAdmin() {
-      return isAuthenticated() && (
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isUserApproved() {
+      return isSignedIn() && (
         (request.auth.token.email != null && isAdminEmail(request.auth.token.email)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin')
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().get('isApproved', false) == true)
       );
     }
 
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email != null && isAdminEmail(request.auth.token.email)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().get('role', '') == 'admin')
+      );
+    }
+
+    function isWorkspaceMember(workspaceId) {
+      return isSignedIn() && (
+        workspaceId == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().get('workspaceId', '') == workspaceId) ||
+        isAdmin()
+      );
+    }
+
+    // ------------------------------------------------------------------------
+    // REGIONAL DEFAULT DENY CATCH-ALL
+    // ------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ------------------------------------------------------------------------
+    // COLECCIÓN: /users/{userId}
+    // Protege perfiles de usuario y evita autoconcesión de rol admin o isApproved
+    // ------------------------------------------------------------------------
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId || isAdmin()
+      ) && (
+        // Si no es un email de admin explícito, no puede auto-otorgarse rol admin ni isApproved=true
+        isAdmin() || (
+          request.resource.data.get('role', 'user') != 'admin' &&
+          request.resource.data.get('isApproved', false) == false
+        ) || (
+          request.auth.token.email != null && isAdminEmail(request.auth.token.email)
+        )
+      );
+
+      allow update: if isSignedIn() && (
+        isAdmin() || (
+          request.auth.uid == userId &&
+          // Un usuario común no puede cambiar su propio rol o estado de aprobación
+          request.resource.data.get('role', resource.data.get('role', 'user')) == resource.data.get('role', 'user') &&
+          request.resource.data.get('isApproved', resource.data.get('isApproved', false)) == resource.data.get('isApproved', false)
+        )
+      );
+
+      allow delete: if isAdmin();
     }
 
-    match /workspace_invites/{inviteId} {
-      allow read, write: if true;
-    }
-
-    match /workspace_settings/{workspaceId} {
-      allow read, write: if true;
-    }
-
+    // ------------------------------------------------------------------------
+    // COLECCIÓN: /recipes/{recipeId}
+    // Fichas técnicas académicas
+    // ------------------------------------------------------------------------
     match /recipes/{recipeId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() || resource.data.get('isPublic', false) == true;
+
+      allow create: if isSignedIn() && (
+        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
+      ) && request.resource.data.get('name', '').size() > 0;
+
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        isWorkspaceMember(resource.data.get('workspaceId', '')) ||
+        resource.data.get('creator', '') == request.auth.uid
+      ) && request.resource.data.get('name', '').size() > 0;
+
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
     }
 
+    // ------------------------------------------------------------------------
+    // COLECCIONES: /proRecipes/{proRecipeId} y /pro_recipes/{proRecipeId}
+    // Taller I+D Profesional (5 niveles)
+    // ------------------------------------------------------------------------
     match /proRecipes/{proRecipeId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
+
+      allow create: if isSignedIn() && (
+        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
+      );
+
+      allow update: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
+
+      allow delete: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
     }
 
     match /pro_recipes/{proRecipeId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
+
+      allow create: if isSignedIn() && (
+        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
+      );
+
+      allow update: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
+
+      allow delete: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
     }
 
+    // ------------------------------------------------------------------------
+    // COLECCIÓN: /products/{productId}
+    // Inventario Maestro de Almacén y Productos
+    // ------------------------------------------------------------------------
     match /products/{productId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+
+      allow create, update: if isSignedIn() && (
+        isUserApproved() || isAdmin()
+      ) && request.resource.data.get('name', '').size() > 0;
+
+      allow delete: if isAdmin();
     }
 
+    // ------------------------------------------------------------------------
+    // COLECCIONES: /menuPlans/{menuPlanId} y /menu_plans/{menuPlanId}
+    // Planificador de menús y órdenes de trabajo
+    // ------------------------------------------------------------------------
     match /menuPlans/{menuPlanId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
+
+      allow create, update: if isSignedIn() && (
+        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
+      );
+
+      allow delete: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
     }
 
     match /menu_plans/{menuPlanId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
+
+      allow create, update: if isSignedIn() && (
+        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
+      );
+
+      allow delete: if isSignedIn() && (
+        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
+      );
     }
 
+    // ------------------------------------------------------------------------
+    // COLECCIÓN: /settings/{docId}
+    // Configuración global y del workspace
+    // ------------------------------------------------------------------------
     match /settings/{docId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+
+      allow write: if isSignedIn() && (
+        isAdmin() || docId == request.auth.uid
+      );
     }
 
+    match /workspace_settings/{workspaceId} {
+      allow read: if isSignedIn();
+
+      allow write: if isSignedIn() && (
+        isWorkspaceMember(workspaceId) || isAdmin()
+      );
+    }
+
+    // ------------------------------------------------------------------------
+    // COLECCIÓN: /workspace_invites/{inviteId}
+    // Invitaciones de equipo
+    // ------------------------------------------------------------------------
+    match /workspace_invites/{inviteId} {
+      allow read: if isSignedIn();
+
+      allow create, update: if isSignedIn() && (
+        isUserApproved() || isAdmin()
+      );
+
+      allow delete: if isSignedIn() && (
+        isAdmin() || resource.data.get('workspace_id', '') == request.auth.uid
+      );
+    }
+
+    // ------------------------------------------------------------------------
+    // COLECCIÓN DE PRUEBAS
+    // ------------------------------------------------------------------------
     match /test/{docId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
   }
 }

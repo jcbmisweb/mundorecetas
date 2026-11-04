@@ -371,6 +371,14 @@ end $$;`;
               <p className="text-[11px] text-slate-500 mt-1">
                 Usa la clave anónima (`anon` / `public`), nunca la `service_role`.
               </p>
+              {anonKey.toLowerCase().includes('service_role') && (
+                <div className="mt-2 p-2.5 bg-rose-950/80 border border-rose-500/50 rounded-xl text-xs text-rose-200 flex items-start gap-2">
+                  <Shield size={16} className="text-rose-400 mt-0.5 shrink-0" />
+                  <div>
+                    <strong>⚠️ ALERTA DE SEGURIDAD CRÍTICA:</strong> Has introducido una clave <code>service_role</code>. Las claves de rol de servicio NUNCA deben ponerse en el frontend porque ignoran la seguridad RLS y permiten control total sobre la base de datos. Por favor, usa la clave <code>anon</code> / <code>public</code>.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
