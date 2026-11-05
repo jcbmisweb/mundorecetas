@@ -32,6 +32,7 @@ import { INITIAL_PRODUCT_DATABASE } from './data/products';
 import { AppSidebar } from './components/AppSidebar';
 import { FlavorLab } from './components/FlavorLab';
 import { PromptHub } from './components/PromptHub';
+import { Calculatox } from './components/Calculatox';
 import { DatabaseAuditModal } from './components/DatabaseAuditModal';
 import { 
   db,
@@ -81,6 +82,7 @@ type ViewState =
   | 'VIEWER' 
   | 'MENU_PLANNER' 
   | 'PRODUCT_DB' 
+  | 'CALCULATOX'
   | 'AI_BRIDGE' 
   | 'PROMPT_HUB' 
   | 'PENDING' 
@@ -2038,6 +2040,8 @@ function App() {
                   }} 
                 />
               </ErrorBoundary>
+            ) : viewState === 'CALCULATOX' ? (
+              <Calculatox onBack={() => setViewState('DASHBOARD')} />
             ) : viewState === 'USER_MANAGEMENT' ? (
               <UserManagement recipes={recipes} onBack={() => setViewState('DASHBOARD')} />
             ) : viewState === 'PRO_WORKSHOP' ? (

@@ -3,7 +3,7 @@ import {
   BookOpen, Compass, Calendar, FlaskConical, Database, 
   Sparkles, Users, Settings, LogOut, ChevronLeft, ChevronRight, 
   Menu, X, Server, CheckCircle2, AlertCircle, RefreshCw, Plus, 
-  ChefHat, Layers, ShieldCheck, Flame, Wand2, School
+  ChefHat, Layers, ShieldCheck, Flame, Wand2, School, Calculator
 } from 'lucide-react';
 import { AppUser, AppSettings, isUserAdmin } from '../types';
 
@@ -12,6 +12,7 @@ export type ActiveWorkspace =
   | 'PRO_WORKSHOP' 
   | 'MENU_PLANNER' 
   | 'PRODUCT_DB' 
+  | 'CALCULATOX'
   | 'AI_BRIDGE' 
   | 'PROMPT_HUB'
   | 'USER_MANAGEMENT' 
@@ -95,6 +96,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const isProWorkshop = currentView === 'PRO_WORKSHOP' || currentView === 'PRO_EDITOR' || currentView === 'PRO_VIEWER' || currentView === 'PRO_GUIDE';
   const isMenuPlanner = currentView === 'MENU_PLANNER';
   const isProductDb = currentView === 'PRODUCT_DB';
+  const isCalculatox = currentView === 'CALCULATOX';
   const isAiBridge = currentView === 'AI_BRIDGE';
   const isPromptHub = currentView === 'PROMPT_HUB';
   const isUserManagement = currentView === 'USER_MANAGEMENT';
@@ -185,6 +187,20 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       badgeClass: 'bg-amber-200 text-amber-900',
       tagColor: 'border-amber-400',
       onClick: () => { onNavigate('PRODUCT_DB'); setIsMobileOpen(false); }
+    },
+    {
+      id: 'CALCULATOX',
+      label: 'CALCULATOX 🧪',
+      subtitle: 'Dosificación & 81 Aditivos SOSA',
+      icon: Calculator,
+      isActive: isCalculatox,
+      count: null,
+      // Identidad cromática: Esmeralda / Turquesa técnico
+      activeClass: 'bg-emerald-50 text-emerald-950 border-emerald-600 shadow-sm font-semibold',
+      iconClass: 'text-emerald-700 bg-emerald-100',
+      badgeClass: 'bg-emerald-200 text-emerald-900',
+      tagColor: 'border-emerald-500',
+      onClick: () => { onNavigate('CALCULATOX'); setIsMobileOpen(false); }
     },
     {
       id: 'PROMPT_HUB',

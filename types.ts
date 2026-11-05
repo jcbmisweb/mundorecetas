@@ -661,3 +661,19 @@ export const isUserOwner = (user?: { email?: string | null } | null): boolean =>
   if (!user || !user.email) return false;
   return ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
 };
+
+export interface TexturizerProduct {
+  id: string;
+  name: string;
+  familyId: number;
+  familyName: string;
+  doseMin?: number;
+  doseMax?: number;
+  doseUnit: '%' | 'g/kg' | 'g/L' | 'hojas/kg' | 'g/100g' | 'según receta';
+  doseReferenceRaw: string;
+  activationMode: string;
+  application: string;
+  pccNotes: string;
+  isCustom?: boolean;
+}
+
