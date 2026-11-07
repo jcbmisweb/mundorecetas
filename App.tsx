@@ -495,7 +495,18 @@ function App() {
         console.warn('Dexie DB load error:', e);
       }
     };
-    loadDexieData().then(() => {
+    loadDexieData().then(async () => {
+      // Optimización de cuota de Firebase: Solo descargar de la nube si el almacenamiento local está vacío (nuevo ordenador/navegador)
+      try {
+        const currentLocal = await localDB.recipes.toArray();
+        if (currentLocal.length < 5) {
+          console.info('Base de datos local vacía o insuficiente (nuevo ordenador). Descargando recetas de Firestore...');
+          await handleRefreshAllData();
+        }
+      } catch (err) {
+        console.warn('Auto-refresh cloud data on startup warning:', err);
+      }
+
       // Comprobación diaria única al comenzar el día (si ya se hizo hoy, no lo vuelve a hacer)
       executeDailyVerification().then(res => {
         if (res.executed) {
@@ -877,8 +888,21 @@ function App() {
     return migrated;
   };
 
-  const handleEdit = (recipe: Recipe) => {
+  const handleEdit = async (recipe: Recipe) => {
     let recipeToEdit = migrateRecipeIfNeeded(recipe);
+
+    // Si viene del listado ligero y no tiene subRecetas cargadas, recuperarlas bajo demanda
+    if (recipe.id && (!recipe.subRecipes || recipe.subRecipes.length === 0)) {
+      try {
+        const docSnap = await getDoc(doc(db, 'recipes', recipe.id));
+        if (docSnap.exists()) {
+          recipeToEdit = migrateRecipeIfNeeded({ id: docSnap.id, ...docSnap.data() } as Recipe);
+        }
+      } catch (err) {
+        console.warn("No se pudieron cargar subrecetas adicionales para editar:", err);
+      }
+    }
+
     const isActuallyAdmin = isUserAdmin(appUser);
     if (!isActuallyAdmin && appUser && recipeToEdit.workspaceId && recipeToEdit.workspaceId !== appUser.workspaceId) {
       // Duplicate community recipe for standard non-admin users
@@ -895,9 +919,34 @@ function App() {
     setViewState('EDITOR');
   };
 
-  const handleView = (recipe: Recipe) => {
-    setCurrentRecipe(migrateRecipeIfNeeded(recipe));
+  const handleView = async (recipe: Recipe) => {
+    const migrated = migrateRecipeIfNeeded(recipe);
+    setCurrentRecipe(migrated);
     setViewState('VIEWER');
+
+    // Si la receta viene del índice sin subRecetas o si estamos en equipo personal, asegurar descarga completa
+    try {
+      const mode = localStorage.getItem('app_device_mode') || 'ies';
+      if (recipe.id) {
+        // Si falta contenido pesado (subRecipes vacías), traerlo de Firestore
+        if (!recipe.subRecipes || recipe.subRecipes.length === 0) {
+          const docSnap = await getDoc(doc(db, 'recipes', recipe.id));
+          if (docSnap.exists()) {
+            const full = { id: docSnap.id, ...docSnap.data() } as Recipe;
+            const migratedFull = migrateRecipeIfNeeded(full);
+            setCurrentRecipe(migratedFull);
+            if (mode === 'personal') {
+              await saveRecipeLocal(migratedFull, true);
+            }
+          }
+        } else if (mode === 'personal') {
+          // En modo personal se conserva en IndexedDB para disponibilidad offline
+          await saveRecipeLocal(migrated, true);
+        }
+      }
+    } catch (e) {
+      console.warn("Lazy fetch recipe details warning:", e);
+    }
   };
 
   const handleSave = async (recipe: Recipe, redirect = true) => {

@@ -5,7 +5,8 @@ import {
   Plus, Search, Eye, Edit2, Trash2, ChefHat, Settings, Calendar, 
   Database, LogOut, FileJson, Sparkles, Users, Coins, Tag, ShoppingCart, 
   UserCheck, Lock, Unlock, Copy, FlaskConical, Server, CheckCircle2, AlertCircle, RefreshCw, X, Compass,
-  LayoutGrid, Maximize2, Wand2, ShieldCheck, BookOpen, Layers, Cloud, HardDrive, Upload, Wifi, WifiOff, FileSpreadsheet
+  LayoutGrid, Maximize2, Wand2, ShieldCheck, BookOpen, Layers, Cloud, HardDrive, Upload, Wifi, WifiOff, FileSpreadsheet,
+  List, Laptop, School, Check
 } from 'lucide-react';
 import { CategoryStripe } from './CategoryStripe';
 import { AllergenIcon } from './AllergenIcon';
@@ -59,15 +60,30 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [dbLatency, setDbLatency] = useState<number | null>(null);
   const [showDbModal, setShowDbModal] = useState(false);
-  const [cardViewMode, setCardViewMode] = useState<'compact' | 'large'>(() => {
-    return (localStorage.getItem('recipe_card_view') as 'compact' | 'large') || 'compact';
+  const [cardViewMode, setCardViewMode] = useState<'list' | 'compact' | 'large'>(() => {
+    return (localStorage.getItem('recipe_card_view') as 'list' | 'compact' | 'large') || 'list';
+  });
+  const [deviceMode, setDeviceMode] = useState<'personal' | 'ies'>(() => {
+    return (localStorage.getItem('app_device_mode') as 'personal' | 'ies') || 'ies';
+  });
+  const [showDeviceBanner, setShowDeviceBanner] = useState(() => {
+    return localStorage.getItem('app_device_mode_confirmed') !== 'true';
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSetCardViewMode = (mode: 'compact' | 'large') => {
+  const handleSetCardViewMode = (mode: 'list' | 'compact' | 'large') => {
     setCardViewMode(mode);
     try {
       localStorage.setItem('recipe_card_view', mode);
+    } catch (_) {}
+  };
+
+  const handleSelectDeviceMode = (mode: 'personal' | 'ies') => {
+    setDeviceMode(mode);
+    setShowDeviceBanner(false);
+    try {
+      localStorage.setItem('app_device_mode', mode);
+      localStorage.setItem('app_device_mode_confirmed', 'true');
     } catch (_) {}
   };
 
@@ -181,6 +197,48 @@ export const Dashboard: React.FC<DashboardProps> = ({
   
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-800 pb-24 font-sans selection:bg-sky-200 selection:text-slate-900">
+      {/* Selector de Entorno de Trabajo: Ordenador IES (Consulta Ligera) vs Ordenador Personal (Taller) */}
+      {showDeviceBanner && (
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-3 border-b border-indigo-500/30 shadow-md">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shrink-0">
+                <Laptop size={15} />
+              </div>
+              <div>
+                <span className="font-bold text-white block sm:inline mr-2">¿Desde qué equipo estás accediendo hoy?</span>
+                <span className="text-slate-300 text-[11px]">Adapta el consumo de datos y fotos a tu ubicación.</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => { handleSelectDeviceMode('ies'); handleSetCardViewMode('list'); }}
+                className={`px-3 py-1.5 rounded-xl font-bold uppercase tracking-wider text-[10px] transition-all flex items-center gap-1.5 ${
+                  deviceMode === 'ies'
+                    ? 'bg-amber-400 text-slate-950 shadow-sm'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+                title="Modo Consulta IES: Carga ultra ligera en lista, sin descargar fotos pesadas ni saturar la red del instituto"
+              >
+                <School size={12} />
+                <span>🏫 Ordenador del IES (Consulta Ligera)</span>
+              </button>
+              <button
+                onClick={() => handleSelectDeviceMode('personal')}
+                className={`px-3 py-1.5 rounded-xl font-bold uppercase tracking-wider text-[10px] transition-all flex items-center gap-1.5 ${
+                  deviceMode === 'personal'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+                title="Modo Personal / Casa: Guarda en local permanentemente para trabajar offline"
+              >
+                <Laptop size={12} />
+                <span>💻 Mi Ordenador Personal</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Cabecera Limpia del Espacio de Trabajo: Base de Datos & Recetario */}
       <header className="bg-white border-b border-slate-200/90 sticky top-0 z-30 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5">
@@ -206,6 +264,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <span className="hidden sm:inline-block px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md bg-sky-100 text-sky-800 border border-sky-200">
                     Base de Datos Normal
                   </span>
+                  <button
+                    onClick={() => {
+                      const next = deviceMode === 'ies' ? 'personal' : 'ies';
+                      handleSelectDeviceMode(next);
+                      if (next === 'ies') handleSetCardViewMode('list');
+                    }}
+                    className={`hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md border transition-all cursor-pointer ${
+                      deviceMode === 'ies'
+                        ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                        : 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200'
+                    }`}
+                    title="Haz clic para alternar entre Modo Ordenador IES (Ligero) y Modo Ordenador Personal"
+                  >
+                    {deviceMode === 'ies' ? <School size={10} /> : <Laptop size={10} />}
+                    <span>{deviceMode === 'ies' ? 'Entorno: IES (Consulta Ligera)' : 'Entorno: Mi Ordenador'}</span>
+                  </button>
                 </div>
                 <p className="text-[11px] font-medium text-slate-500">
                   {filteredRecipes.length} recetas disponibles · Costes, escandallos y alérgenos
@@ -530,6 +604,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
              {/* Selector de Vista: 12 Compactas (4x4 cm) vs Foto Grande */}
              <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-200 shadow-2xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSetCardViewMode('list')}
+                  className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+                    cardViewMode === 'list'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                  title="Listado ligero sin fotos: Cero consumo, ideal para ordenadores del IES"
+                >
+                  <List size={13} />
+                  <span className="hidden sm:inline">Listado Ligero</span>
+                  <span className="sm:hidden">Lista</span>
+                </button>
                <button
                  type="button"
                  onClick={() => handleSetCardViewMode('compact')}
@@ -640,7 +728,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
-        <div className={cardViewMode === 'compact' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"}>
+        <div className={cardViewMode === 'list' ? "space-y-2.5" : cardViewMode === 'compact' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"}>
           {visibleRecipes.length > 0 ? visibleRecipes.map(recipe => {
             const info = getRecipeTypeInfo(recipe);
             const costPerPortion = recipe.totalCost && recipe.yieldQuantity ? (recipe.totalCost / recipe.yieldQuantity).toFixed(2).replace('.', ',') : '0,00';
@@ -651,6 +739,73 @@ export const Dashboard: React.FC<DashboardProps> = ({
             const isMine = appUser?.workspaceId && (recipe.workspaceId === appUser.workspaceId || (isActuallyAdmin && !recipe.workspaceId));
             const isCommunity = !isMine;
 
+            if (cardViewMode === 'list') {
+              return (
+                <div
+                  key={recipe.id}
+                  onClick={() => onView(recipe)}
+                  className={`bg-white rounded-2xl border hover:border-sky-500/80 shadow-2xs hover:shadow-md transition-all p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group cursor-pointer ${info.border}`}
+                >
+                  {/* Lado izquierdo: Identificador y Título */}
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${info.gradient} text-white font-mono`}>
+                      {recipe.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${info.badgeBg}`}>
+                          {info.label}
+                        </span>
+                        <h3 className="font-serif font-black text-xs sm:text-sm text-slate-900 group-hover:text-sky-700 transition-colors uppercase tracking-tight truncate">
+                          {recipe.name}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
+                        <span className="font-bold uppercase text-slate-600">{recipe.category || 'General'}</span>
+                        <span>•</span>
+                        <span>{recipe.yieldQuantity} {recipe.yieldUnit || 'PAX'}</span>
+                        <span>•</span>
+                        <span className="font-mono font-bold text-emerald-700">{costPerPortion}€ / ración</span>
+                        {recipe.creator && (
+                          <>
+                            <span>•</span>
+                            <span className="text-slate-500 truncate max-w-[120px]">Chef: {recipe.creator}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lado derecho: Alérgenos + Estado + Acciones directas */}
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    {allAllergens.size > 0 && (
+                      <div className="flex items-center gap-1 bg-slate-50 border border-slate-200/80 px-2 py-1 rounded-xl">
+                        {Array.from(allAllergens).slice(0, 3).map(a => (
+                          <AllergenIcon key={a} allergen={a as any} size={13} />
+                        ))}
+                        {allAllergens.size > 3 && (
+                          <span className="text-[8px] font-bold text-slate-400">+{allAllergens.size - 3}</span>
+                        )}
+                      </div>
+                    )}
+                    <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider ${recipe.synced ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+                      {recipe.synced ? 'Nube' : 'Local'}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEdit(recipe); }}
+                      className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all"
+                      title="Editar Ficha"
+                    >
+                      <Edit2 size={13} />
+                    </button>
+                    <div className="px-2.5 py-1 bg-slate-900 group-hover:bg-sky-700 text-white rounded-xl font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 transition-colors">
+                      <span>Ver</span>
+                      <Eye size={11} />
+                    </div>
+                  </div>
+                </div>
+              );
+            }
             return cardViewMode === 'compact' ? (
               /* ========================================================================= */
               /* VISTA COMPACTA 4x4 CM: 12 Recetas de una pasada con Cabecera Biselada     */
@@ -703,6 +858,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         src={recipe.photo} 
                         className="w-full h-full object-cover object-right group-hover/img:scale-105 transition-transform duration-300" 
                         alt={recipe.name} 
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-emerald-50/50 text-slate-400 p-1 text-center">
@@ -868,6 +1025,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       src={recipe.photo} 
                       className="w-full h-full object-cover object-right group-hover:scale-104 transition-transform duration-500" 
                       alt="" 
+                      loading="lazy"
+                      decoding="async"
                     />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-emerald-50/50 text-slate-400">
