@@ -105,6 +105,39 @@ export const normalizeAllergen = (input: string): Allergen | null => {
   return null;
 };
 
+export const formatElaborationSteps = (rawText?: string): string[] => {
+  if (!rawText) return [];
+  const trimmed = rawText.trim();
+  // Si ya contiene saltos de línea explícitos, respetarlos
+  if (trimmed.includes("\n")) {
+    const lines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length > 1) {
+      return lines;
+    }
+  }
+
+  // Detectar pasos numerados inline: "1. ... 2. ... 3. ..."
+  const parts = trimmed
+    .split(/(?<=(?:^|[.!?\n]))\s*(?=\b\d{1,2}[\.\)]\s+[A-ZÁÉÍÓÚÑa-záéíóúñ])/g)
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  if (parts.length > 1) {
+    return parts;
+  }
+
+  const fallbackParts = trimmed
+    .split(/(?=\b\d{1,2}[\.\)]\s+)/g)
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  if (fallbackParts.length > 1) {
+    return fallbackParts;
+  }
+
+  return [trimmed];
+};
+
 export const RecipeView: React.FC<RecipeViewProps> = ({
   recipe,
   settings,
@@ -292,6 +325,13 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
     return list;
   }, [recipe, paxRatio, productDatabase]);
 
+  const handlePrint = () => {
+    if (recipe?.name) {
+      document.title = recipe.name;
+    }
+    window.print();
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-2 md:p-4 print:p-0 print:bg-white font-sans text-slate-900">
       <style
@@ -301,13 +341,15 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .page-break { page-break-before: always !important; break-before: page !important; }
           .no-break { break-inside: avoid !important; page-break-inside: avoid !important; }
-          .instructions-text { font-size: 10px !important; line-height: 1.4 !important; }
+          .instructions-text { font-size: 12px !important; line-height: 1.55 !important; }
+          .instructions-step { margin-bottom: 0.4rem !important; }
           .ingredients-table { font-size: 10px !important; }
           .video-list-container { break-inside: avoid !important; page-break-inside: avoid !important; }
+          .pase-card-single-page { break-inside: avoid !important; page-break-inside: avoid !important; max-height: 100% !important; }
           
           @page {
-            margin: 12mm 10mm 14mm 10mm;
-            size: portrait;
+            margin: 8mm 8mm 8mm 8mm;
+            size: A4 portrait;
           }
         }
       `,
@@ -344,12 +386,20 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             {/* BOTÓN PRINCIPAL: IMPRIMIR FICHA */}
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={handlePrint}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg transition-all"
             >
               <Printer size={18} fill="currentColor" className="opacity-90" />
               <span>Imprimir Ficha</span>
             </button>
+
+            {/* AVISO PDF LIMPIO SIN URL NI FECHA */}
+            <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-[10px] text-sky-950 flex items-start gap-2">
+              <span className="text-sm shrink-0">💡</span>
+              <span className="leading-snug">
+                <strong>Consejo PDF limpio:</strong> Al guardar en PDF, desmarca <em>"Encabezados y pies de página"</em> en las opciones del navegador para que no aparezcan URLs ni fechas en los márgenes.
+              </span>
+            </div>
           </div>
 
           <hr className="border-slate-100" />
@@ -1173,83 +1223,6 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             </div>
           </div>
 
-          {/* SECCIÓN: PRESENTACIÓN Y PUNTOS IMPORTANTES (SI LOS HAY) */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-5 break-inside-avoid">
-            {/* APARTADO: PRESENTACIÓN */}
-            <div
-              className={`${
-                (recipe.importantNotes ||
-                  recipe.serviceDetails?.importantNotes ||
-                  (recipe.takeAwayDetails?.isTakeAway &&
-                    (recipe.takeAwayDetails?.packagingNotes ||
-                      recipe.takeAwayDetails?.transportTips)))
-                  ? "md:col-span-7"
-                  : "md:col-span-12"
-              } bg-white border-2 border-slate-900 rounded-2xl p-4 shadow-xs flex flex-col justify-between`}
-            >
-              <div>
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
-                      <Sparkles size={14} />
-                    </div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                      PRESENTACIÓN
-                    </h3>
-                  </div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
-                    {recipe.takeAwayDetails?.isTakeAway
-                      ? "Packaging & Montaje"
-                      : "Vajilla & Pase"}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-700 font-serif italic leading-relaxed whitespace-pre-wrap">
-                  {recipe.presentation ||
-                    recipe.platingInstructions ||
-                    recipe.serviceDetails?.presentation ||
-                    (recipe.takeAwayDetails?.isTakeAway
-                      ? "Disposición ordenada en el envase kraft principal, salsa en tarrina hermética separada y crujientes secos para el comensal."
-                      : "Emplatado equilibrado y limpio siguiendo los estándares gastronómicos de la receta.")}
-                </p>
-              </div>
-            </div>
-
-            {/* APARTADO: PUNTOS IMPORTANTES (SI LOS HAY) */}
-            {(recipe.importantNotes ||
-              recipe.serviceDetails?.importantNotes ||
-              (recipe.takeAwayDetails?.isTakeAway &&
-                (recipe.takeAwayDetails?.packagingNotes ||
-                  recipe.takeAwayDetails?.transportTips))) ? (
-              <div className="md:col-span-5 bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between border-b border-amber-200 pb-2 mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-bold">
-                        <AlertCircle size={14} />
-                      </div>
-                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-950">
-                        PUNTOS IMPORTANTES (SI LOS HAY)
-                      </h3>
-                    </div>
-                    <span className="text-[7.5px] font-black uppercase tracking-widest text-amber-800 bg-amber-200/70 px-1.5 py-0.5 rounded">
-                      Atención
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-950 font-medium leading-relaxed italic whitespace-pre-wrap">
-                    {recipe.importantNotes ||
-                      recipe.serviceDetails?.importantNotes ||
-                      [
-                        recipe.takeAwayDetails?.packagingNotes,
-                        recipe.takeAwayDetails?.transportTips,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
           {/* VÍDEOS Y ENLACES GENERALES DEL PLATO */}
           {hasValidVideos(recipe.videos, recipe.sourceUrl || recipe.videoUrl) ? (
             <VideoListDisplay
@@ -1344,8 +1317,12 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                             ))}
                           </div>
                         )}
-                        <div className="text-[10px] text-slate-600 leading-snug text-justify whitespace-pre-wrap font-serif italic instructions-text">
-                          {sub.instructions || "Técnica no definida."}
+                        <div className="text-[12px] sm:text-[13px] text-slate-700 leading-relaxed text-justify font-serif italic instructions-text space-y-2">
+                          {formatElaborationSteps(sub.instructions).map((step, sStepIdx) => (
+                            <p key={sStepIdx} className="instructions-step">
+                              {step}
+                            </p>
+                          ))}
                         </div>
                         {hasValidVideos(sub.videos, sub.videoUrl) ? (
                           <VideoListDisplay
@@ -1360,6 +1337,83 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* SECCIÓN MOVIDA: PRESENTACIÓN Y PUNTOS IMPORTANTES (JUSTO DEBAJO DEL MONTAJE) */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 my-6 no-break">
+              {/* APARTADO: PRESENTACIÓN */}
+              <div
+                className={`${
+                  (recipe.importantNotes ||
+                    recipe.serviceDetails?.importantNotes ||
+                    (recipe.takeAwayDetails?.isTakeAway &&
+                      (recipe.takeAwayDetails?.packagingNotes ||
+                        recipe.takeAwayDetails?.transportTips)))
+                    ? "md:col-span-7"
+                    : "md:col-span-12"
+                } bg-white border-2 border-slate-900 rounded-2xl p-4 shadow-xs flex flex-col justify-between`}
+              >
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                        <Sparkles size={14} />
+                      </div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                        PRESENTACIÓN (MONTAJE & PASE)
+                      </h3>
+                    </div>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                      {recipe.takeAwayDetails?.isTakeAway
+                        ? "Packaging & Montaje"
+                        : "Vajilla & Pase en Sala"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-700 font-serif italic leading-relaxed whitespace-pre-wrap">
+                    {recipe.presentation ||
+                      recipe.platingInstructions ||
+                      recipe.serviceDetails?.presentation ||
+                      (recipe.takeAwayDetails?.isTakeAway
+                        ? "Disposición ordenada en el envase kraft principal, salsa en tarrina hermética separada y crujientes secos para el comensal."
+                        : "Emplatado equilibrado y limpio siguiendo los estándares gastronómicos de la receta.")}
+                  </p>
+                </div>
+              </div>
+
+              {/* APARTADO: PUNTOS IMPORTANTES (SI LOS HAY) */}
+              {(recipe.importantNotes ||
+                recipe.serviceDetails?.importantNotes ||
+                (recipe.takeAwayDetails?.isTakeAway &&
+                  (recipe.takeAwayDetails?.packagingNotes ||
+                    recipe.takeAwayDetails?.transportTips))) ? (
+                <div className="md:col-span-5 bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-amber-200 pb-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-bold">
+                          <AlertCircle size={14} />
+                        </div>
+                        <h3 className="text-xs font-black uppercase tracking-wider text-amber-950">
+                          PUNTOS IMPORTANTES (SI LOS HAY)
+                        </h3>
+                      </div>
+                      <span className="text-[7.5px] font-black uppercase tracking-widest text-amber-800 bg-amber-200/70 px-1.5 py-0.5 rounded">
+                        Atención
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-950 font-medium leading-relaxed italic whitespace-pre-wrap">
+                      {recipe.importantNotes ||
+                        recipe.serviceDetails?.importantNotes ||
+                        [
+                          recipe.takeAwayDetails?.packagingNotes,
+                          recipe.takeAwayDetails?.transportTips,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {/* DESPIECE Y COMPONENTES ENLAZADOS */}
@@ -1436,91 +1490,92 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             />
           </div>
 
-          {/* FICHA TÉCNICA DE SERVICIO + CHECKLIST - Nueva página en impresión */}
+          {/* FICHA TÉCNICA DE SERVICIO + CHECKLIST - Página única en impresión */}
           <div className="page-break"></div>
-          <div className="bg-white border-2 border-slate-900 text-slate-900 p-8 rounded-[2rem] mt-6 break-inside-avoid">
-            <div className="flex items-center gap-3 mb-6 border-b border-slate-200 pb-4">
-              <Clock size={24} className="text-amber-600" />
-              <div>
-                <h3 className="text-xl font-black uppercase tracking-tighter">
-                  Ficha de Pase y Servicio
-                </h3>
-                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">
-                  Información clave para sala
-                </p>
+          <div className="bg-white border-2 border-slate-900 text-slate-900 p-5 md:p-6 print:p-4 rounded-2xl mt-4 break-inside-avoid pase-card-single-page space-y-3.5 print:space-y-2.5">
+            {/* Cabecera compacta */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 print:pb-1.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-slate-900">
+                    Ficha de Pase y Servicio
+                  </h3>
+                  <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                    Información técnica operativa para sala y pase
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="px-2.5 py-1 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-wider">
+                  {recipe.name}
+                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-5 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                  Temperatura
+            {/* 5 Tarjetas Estadísticas Compactas (1 Fila Intuitiva) */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 print:gap-1.5">
+              <div className="bg-slate-50 p-2.5 print:p-2 rounded-xl border border-slate-200/90 flex flex-col justify-between">
+                <p className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                  <Thermometer size={12} className="text-rose-500 shrink-0" />
+                  <span>Temperatura</span>
                 </p>
-                <div className="flex items-center gap-2">
-                  <Thermometer size={16} className="text-rose-500" />
-                  <span className="text-xs font-black text-amber-600">
-                    {recipe.serviceDetails?.servingTemp || "--"}
-                  </span>
-                </div>
+                <span className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
+                  {recipe.serviceDetails?.servingTemp || "Templado / 45-50°C"}
+                </span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                  Técnica
+              <div className="bg-slate-50 p-2.5 print:p-2 rounded-xl border border-slate-200/90 flex flex-col justify-between">
+                <p className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                  <Info size={12} className="text-indigo-600 shrink-0" />
+                  <span>Técnica</span>
                 </p>
-                <div className="flex items-start gap-2">
-                  <Info size={14} className="text-indigo-600 mt-0.5 shrink-0" />
-                  <span className="text-[9px] font-black uppercase text-slate-700 leading-tight">
-                    {recipe.serviceDetails?.serviceType || "Servicio estándar"}
-                  </span>
-                </div>
+                <span className="text-[10px] sm:text-[11px] font-black uppercase text-slate-800 leading-tight line-clamp-2">
+                  {recipe.serviceDetails?.serviceType || "Pase en bandeja / sala"}
+                </span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-200">
-                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                  Cubertería
+              <div className="bg-slate-50 p-2.5 print:p-2 rounded-xl border border-slate-200/90 flex flex-col justify-between">
+                <p className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                  <UtensilsCrossed size={12} className="text-amber-600 shrink-0" />
+                  <span>Cubertería</span>
                 </p>
-                <div className="flex items-start gap-2">
-                  <UtensilsCrossed
-                    size={16}
-                    className="text-amber-600 shrink-0"
-                  />
-                  <span className="text-[8px] font-bold text-slate-600 uppercase leading-snug">
-                    {recipe.serviceDetails?.cutlery || "Estándar"}
-                  </span>
-                </div>
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-800 uppercase leading-tight line-clamp-2">
+                  {recipe.serviceDetails?.cutlery || "Directo / Finger Food"}
+                </span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-amber-500/30">
-                <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest mb-2">
-                  Rendimiento
+              <div className="bg-amber-50/60 p-2.5 print:p-2 rounded-xl border border-amber-300/80 flex flex-col justify-between">
+                <p className="text-[7.5px] font-black text-amber-700 uppercase tracking-widest mb-1 flex items-center gap-1">
+                  <Users size={12} className="text-amber-700 shrink-0" />
+                  <span>Rendimiento</span>
                 </p>
-                <div className="flex items-center gap-2">
-                  <Users size={18} className="text-amber-600" />
-                  <span className="text-lg font-black text-amber-500 leading-none">
-                    {dynamicPax} {(recipe.yieldUnit || "pax").substring(0, 3)}
-                  </span>
-                </div>
+                <span className="text-xs sm:text-sm font-black text-amber-900 leading-tight">
+                  {dynamicPax} {(recipe.yieldUnit || "PAX").toUpperCase()}
+                </span>
               </div>
 
-              <div className="bg-white p-4 rounded-xl border border-indigo-500/30">
-                <p className="text-[8px] font-black text-indigo-600 uppercase tracking-widest mb-2">
-                  Coste / Ración
+              <div className="bg-indigo-50/60 p-2.5 print:p-2 rounded-xl border border-indigo-200 flex flex-col justify-between">
+                <p className="text-[7.5px] font-black text-indigo-700 uppercase tracking-widest mb-1 flex items-center gap-1">
+                  <span>Coste / Ración</span>
                 </p>
-                <div className="flex items-center gap-1">
-                  <span className="text-lg font-black text-indigo-600 leading-none">
+                <div className="flex items-baseline gap-0.5">
+                  <span className="text-xs sm:text-sm font-black text-indigo-900 leading-tight font-mono">
                     {recipe.totalCost && recipe.yieldQuantity
                       ? ((recipe.totalCost / recipe.yieldQuantity) * paxRatio)
                           .toFixed(2)
                           .replace(".", ",")
                       : "0,00"}
                   </span>
-                  <span className="text-xs font-black text-indigo-400">€</span>
+                  <span className="text-[9px] font-black text-indigo-700">€</span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-4">
+            {/* Protocolo de Presentación de Sala y Puntos Críticos */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 print:gap-2">
               <div
                 className={`${
                   recipe.importantNotes ||
@@ -1529,19 +1584,19 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                   recipe.takeAwayDetails?.transportTips
                     ? "md:col-span-7"
                     : "md:col-span-12"
-                } bg-white p-5 rounded-2xl border border-slate-200`}
+                } bg-white p-3.5 print:p-2.5 rounded-xl border border-slate-200/90 shadow-2xs`}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles size={14} className="text-amber-500" />
-                  <h4 className="text-[9px] font-black text-slate-900 uppercase tracking-widest">
-                    PRESENTACIÓN
+                <div className="flex items-center gap-1.5 mb-1.5 border-b border-slate-100 pb-1">
+                  <Sparkles size={13} className="text-amber-500" />
+                  <h4 className="text-[8.5px] font-black text-slate-900 uppercase tracking-wider">
+                    Presentación y Montaje en Sala
                   </h4>
                 </div>
-                <p className="text-[10px] text-slate-600 font-medium leading-relaxed italic whitespace-pre-wrap">
+                <p className="text-[10px] print:text-[9.5px] text-slate-700 font-serif italic leading-relaxed whitespace-pre-wrap">
                   {recipe.presentation ||
                     recipe.platingInstructions ||
                     recipe.serviceDetails?.presentation ||
-                    "Seguir protocolo estándar de la categoría."}
+                    "Servicio equilibrado y limpio siguiendo los estándares gastronómicos de la receta."}
                 </p>
               </div>
 
@@ -1549,14 +1604,14 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                 recipe.serviceDetails?.importantNotes ||
                 recipe.takeAwayDetails?.packagingNotes ||
                 recipe.takeAwayDetails?.transportTips) && (
-                <div className="md:col-span-5 bg-amber-50/80 p-5 rounded-2xl border border-amber-200/90">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle size={14} className="text-amber-600" />
-                    <h4 className="text-[9px] font-black text-amber-950 uppercase tracking-widest">
-                      PUNTOS IMPORTANTES (SI LOS HAY)
+                <div className="md:col-span-5 bg-amber-50/70 p-3.5 print:p-2.5 rounded-xl border border-amber-300 shadow-2xs">
+                  <div className="flex items-center gap-1.5 mb-1.5 border-b border-amber-200/80 pb-1">
+                    <AlertCircle size={13} className="text-amber-600" />
+                    <h4 className="text-[8.5px] font-black text-amber-950 uppercase tracking-wider">
+                      Puntos Críticos & Alérgenos
                     </h4>
                   </div>
-                  <p className="text-[10px] text-amber-900 font-medium leading-relaxed italic whitespace-pre-wrap">
+                  <p className="text-[10px] print:text-[9.5px] text-amber-950 font-medium leading-relaxed italic whitespace-pre-wrap">
                     {recipe.importantNotes ||
                       recipe.serviceDetails?.importantNotes ||
                       [
@@ -1570,38 +1625,36 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
               )}
             </div>
 
-            {/* CHECKLIST DE MISE EN PLACE - SOLO AL FINAL DE LA FICHA DE SERVICIO */}
-            <div className="mt-8 p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-              <h3 className="flex items-center gap-2 font-black text-slate-900 uppercase tracking-tighter text-xs mb-4 border-b border-slate-200 pb-2">
-                <UtensilsCrossed size={14} className="text-emerald-600" />{" "}
-                CHECKLIST DE MISE EN PLACE (REPASO FINAL)
-              </h3>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+            {/* Checklist de Mise en Place (Repaso Final) - Formato Compacto 2 Columnas */}
+            <div className="p-3.5 print:p-2.5 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+              <h4 className="flex items-center gap-1.5 font-black text-slate-900 uppercase tracking-tight text-[10px] print:text-[9px] mb-2.5 border-b border-slate-200 pb-1">
+                <UtensilsCrossed size={12} className="text-emerald-600" />
+                <span>Checklist de Mise en Place (Repaso de Pase)</span>
+              </h4>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 print:gap-y-1 text-[9.5px] print:text-[8.5px]">
                 {(recipe.subRecipes || []).map((sub, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <div className="w-4 h-4 border-2 border-slate-300 rounded flex-shrink-0"></div>
-                    <span className="text-[10px] font-bold text-slate-700 uppercase">
+                  <div key={idx} className="flex items-center gap-2 min-w-0">
+                    <div className="w-3.5 h-3.5 border border-slate-400 rounded shrink-0 bg-white"></div>
+                    <span className="font-bold text-slate-700 uppercase truncate">
                       {sub.name}
                     </span>
                   </div>
                 ))}
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 border-2 border-slate-300 rounded flex-shrink-0"></div>
-                  <span className="text-[10px] font-bold text-slate-700 uppercase">
-                    Marcaje de Mesa (
-                    {recipe.serviceDetails?.cutlery || "Estándar"})
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-3.5 h-3.5 border border-slate-400 rounded shrink-0 bg-white"></div>
+                  <span className="font-bold text-slate-700 uppercase truncate">
+                    Marcaje de Mesa ({recipe.serviceDetails?.cutlery || "Estándar"})
                   </span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 border-2 border-slate-300 rounded flex-shrink-0"></div>
-                  <span className="text-[10px] font-bold text-slate-700 uppercase">
-                    Temperatura de Servicio (
-                    {recipe.serviceDetails?.servingTemp || "--"})
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-3.5 h-3.5 border border-slate-400 rounded shrink-0 bg-white"></div>
+                  <span className="font-bold text-slate-700 uppercase truncate">
+                    Temperatura de Servicio ({recipe.serviceDetails?.servingTemp || "--"})
                   </span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 border-2 border-slate-300 rounded flex-shrink-0"></div>
-                  <span className="text-[10px] font-bold text-slate-700 uppercase">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-3.5 h-3.5 border border-slate-400 rounded shrink-0 bg-white"></div>
+                  <span className="font-bold text-slate-700 uppercase truncate">
                     Protocolo de Emplatado
                   </span>
                 </div>

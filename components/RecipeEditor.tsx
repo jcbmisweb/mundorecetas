@@ -108,6 +108,16 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     }
   });
   const [subRecipes, setSubRecipes] = useState<SubRecipe[]>([]);
+
+  useEffect(() => {
+    const originalTitle = document.title;
+    if (name.trim()) {
+      document.title = `${name.trim()} (Editor) - Recetario JCB`;
+    }
+    return () => {
+      document.title = originalTitle;
+    };
+  }, [name]);
   const [linkedRecipeIds, setLinkedRecipeIds] = useState<string[]>(initialRecipe?.linkedRecipeIds || []);
   const [activeTab, setActiveTab] = useState<number>(0);
   const [suggestions, setSuggestions] = useState<{idx: number, list: Product[]} | null>(null);
@@ -618,8 +628,9 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       <div className="sticky top-0 z-40 bg-white border-b border-slate-200 px-8 py-4 shadow-sm flex justify-between items-center">
         <div className="flex items-center gap-4">
           <button type="button" onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-900 transition-colors"><X size={24} /></button>
-          <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2">
-            <Book className="text-amber-500" /> {initialRecipe ? 'Editar Ficha' : 'Nueva Ficha Técnica'}
+          <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2 max-w-xl truncate">
+            <Book className="text-amber-500 shrink-0" /> 
+            <span className="truncate">{name.trim() || (initialRecipe ? 'Editar Ficha' : 'Nueva Ficha Técnica')}</span>
           </h2>
         </div>
         <div className="flex gap-2">
