@@ -1539,19 +1539,42 @@ function App() {
 
   const handleSaveProduct = async (product: Product) => {
     try {
-      const currentUid = user?.id || appUser?.uid;
-      if (!currentUid) return;
+      const validId = product.id || `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const currentUid = user?.id || appUser?.uid || 'local-user';
       const isActuallyAdmin = isUserAdmin(appUser);
+      const parsedPrice = typeof product.pricePerUnit === 'number'
+        ? product.pricePerUnit
+        : (parseFloat(String(product.pricePerUnit || 0).replace(',', '.')) || 0);
+
       const productToSave: Product = {
         ...product,
+        id: validId,
+        name: (product.name || '').trim().toUpperCase(),
+        category: (product.category || 'VARIOS').trim().toUpperCase(),
+        pricePerUnit: parsedPrice,
+        unit: product.unit || 'kg',
+        allergens: Array.isArray(product.allergens) ? product.allergens : [],
         status: isActuallyAdmin ? 'approved' : (product.status || 'pending'),
-        requestedBy: product.requestedBy || currentUid
+        requestedBy: product.requestedBy || currentUid,
+        lastModified: Date.now(),
+        synced: false
       };
-      await setDoc(doc(db, 'products', productToSave.id), productToSave, { merge: true });
-      await saveProductLocal(productToSave, true);
-      setProductDatabase(prev => [productToSave, ...prev.filter(p => p.id !== productToSave.id)]);
 
-      // Sincronizar automáticamente con todas las fichas técnicas que contengan este ingrediente
+      // 1. Guardar de forma inmediata en el estado de React y localStorage (0ms)
+      setProductDatabase(prev => {
+        const next = [productToSave, ...prev.filter(p => p.id !== productToSave.id)];
+        try {
+          localStorage.setItem('cached_products', JSON.stringify(next));
+        } catch (e) {
+          console.warn("localStorage cached_products error:", e);
+        }
+        return next;
+      });
+
+      // 2. Guardar prioritariamente en Dexie IndexedDB en el disco local
+      await saveProductLocal(productToSave, false);
+
+      // 3. Sincronizar automáticamente con todas las fichas técnicas locales que contengan este ingrediente
       const cleanProdName = normalizeText(productToSave.name);
       const updatedRecipes: Recipe[] = [];
 
@@ -1604,8 +1627,7 @@ function App() {
             lastModified: Date.now()
           };
           updatedRecipes.push(updatedRecipe);
-          await setDoc(doc(db, 'recipes', updatedRecipe.id), updatedRecipe, { merge: true });
-          await saveRecipeLocal(updatedRecipe, true);
+          await saveRecipeLocal(updatedRecipe, false);
         }
       }
 
@@ -1622,8 +1644,30 @@ function App() {
           localStorage.setItem('cached_recipes', JSON.stringify(allUpdated));
         } catch (e) {}
       }
+
+      // 4. Sincronización en la nube (Firestore) en segundo plano sin bloquear la interfaz
+      (async () => {
+        try {
+          if (navigator.onLine && !getIsQuotaExceeded()) {
+            const cleanToSave = JSON.parse(JSON.stringify(productToSave));
+            await setDoc(doc(db, 'products', cleanToSave.id), cleanToSave, { merge: true });
+            await saveProductLocal(cleanToSave, true);
+            setProductDatabase(prev => prev.map(p => p.id === cleanToSave.id ? { ...p, synced: true } : p));
+
+            for (const ur of updatedRecipes) {
+              try {
+                const cleanRecipe = JSON.parse(JSON.stringify(ur));
+                await setDoc(doc(db, 'recipes', cleanRecipe.id), cleanRecipe, { merge: true });
+                await saveRecipeLocal(cleanRecipe, true);
+              } catch {}
+            }
+          }
+        } catch (syncErr: any) {
+          console.warn("Sincronización en la nube de producto (Firebase):", syncErr);
+        }
+      })();
     } catch (err) {
-      console.error("Error saving product to Firestore:", err);
+      console.error("Error al procesar alta de producto:", err);
     }
   };
 

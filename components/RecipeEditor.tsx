@@ -13,7 +13,7 @@ import { calculateIngredientCost } from '../lib/costUtils';
 import { compressImage, compressHeroBannerImage, getImageAspect } from '../lib/imageUtils';
 import { uploadFileToDrive, transformDriveUrl, GOOGLE_DRIVE_FOLDER_ID, sanitizeFileName } from '../lib/googleDriveService';
 import { ImagePromptModal } from './ImagePromptModal';
-import { findSimilarProducts, matchProductInCatalog, reconcileIngredientWithCatalog, reconcileRecipeWithCatalog } from '../lib/productUtils';
+import { findSimilarProducts, matchProductInCatalog, reconcileIngredientWithCatalog, reconcileRecipeWithCatalog, normalizeText } from '../lib/productUtils';
 import { 
   Save, X, Plus, Trash2, Image as ImageIcon, 
   Book, Utensils, Thermometer, Info, Database, MessageSquare, ChevronDown, CheckCircle2,
@@ -366,27 +366,52 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     e.preventDefault();
     if (!quickAddProduct) return;
     
-    onAddProduct({
+    const rawPrice = quickAddProduct.pricePerUnit;
+    const parsedPrice = typeof rawPrice === 'number'
+      ? rawPrice
+      : (parseFloat(String(rawPrice || 0).replace(',', '.')) || 0);
+
+    const finalProduct: Product = {
       ...quickAddProduct,
-      category: familySearch.toUpperCase() || 'VARIOS'
-    });
+      id: quickAddProduct.id || `p_quick_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: quickAddProduct.name.trim().toUpperCase(),
+      category: familySearch.trim().toUpperCase() || 'VARIOS',
+      pricePerUnit: parsedPrice,
+      unit: quickAddProduct.unit || 'kg',
+      allergens: Array.isArray(quickAddProduct.allergens) ? quickAddProduct.allergens : [],
+      supplier: quickAddProduct.supplier?.trim().toUpperCase() || undefined,
+      wastePercentage: quickAddProduct.wastePercentage,
+      weightPerUnit: quickAddProduct.weightPerUnit
+    };
+
+    onAddProduct(finalProduct);
     
+    const cleanFinalName = normalizeText(finalProduct.name);
     const newSubs = [...subRecipes];
-    newSubs.forEach(sub => {
-      sub.ingredients.forEach(ing => {
-        if (ing.name.toUpperCase() === quickAddProduct.name.toUpperCase()) {
-          ing.pricePerUnit = quickAddProduct.pricePerUnit;
-          ing.baseUnit = quickAddProduct.unit;
-          ing.unit = quickAddProduct.unit;
-          ing.weightPerUnit = quickAddProduct.weightPerUnit;
-          ing.allergens = quickAddProduct.allergens;
-          ing.cost = calculateIngredientCost(ing.quantity, ing.unit, ing.pricePerUnit, ing.baseUnit, ing.weightPerUnit);
+    newSubs.forEach((sub, sIdx) => {
+      sub.ingredients.forEach((ing, iIdx) => {
+        const isTarget = quickAddTarget
+          ? (sIdx === quickAddTarget.subIdx && iIdx === quickAddTarget.ingIdx)
+          : (normalizeText(ing.name) === cleanFinalName || normalizeText(ing.name) === normalizeText(quickAddProduct.name));
+
+        if (isTarget) {
+          ing.name = finalProduct.name;
+          ing.category = finalProduct.category;
+          ing.pricePerUnit = finalProduct.pricePerUnit;
+          ing.baseUnit = finalProduct.unit;
+          ing.unit = ing.unit || finalProduct.unit;
+          ing.weightPerUnit = finalProduct.weightPerUnit;
+          ing.allergens = finalProduct.allergens;
+          ing.cost = calculateIngredientCost(ing.quantity, ing.unit, finalProduct.pricePerUnit, ing.baseUnit, ing.weightPerUnit);
+          ing.isInternalPrep = false;
+          ing.isNonProduct = false;
         }
       });
     });
     
     setSubRecipes(newSubs);
     setQuickAddProduct(null);
+    setQuickAddTarget(null);
   };
 
   const selectProduct = (subIdx: number, ingIdx: number, product: Product) => {
