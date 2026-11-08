@@ -791,6 +791,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider ${recipe.synced ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
                       {recipe.synced ? 'Nube' : 'Local'}
                     </span>
+                    {recipe.isVerified && (
+                      <span className="px-2 py-1 rounded-lg bg-emerald-600 text-white font-black text-[8px] uppercase tracking-wider flex items-center gap-1 shadow-2xs" title="Ficha verificada y correcta">
+                        <CheckCircle2 size={11} />
+                        <span>Verificada</span>
+                      </span>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); onEdit(recipe); }}
                       className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all"
@@ -846,6 +852,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {recipe.synced ? <Wifi size={7} /> : <HardDrive size={7} />}
                       <span>{recipe.synced ? 'Online' : 'Offline'}</span>
                     </div>
+
+                    {recipe.isVerified && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white font-black text-[7px] uppercase tracking-tight flex items-center gap-0.5 shadow-2xs" title="Ficha verificada y correcta">
+                        <CheckCircle2 size={8} />
+                        <span>Verificada</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1015,6 +1028,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {recipe.synced ? <Wifi size={8} /> : <HardDrive size={8} />}
                       <span>{recipe.synced ? 'Online' : 'Offline'}</span>
                     </div>
+
+                    {recipe.isVerified && (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-black text-[7.5px] uppercase tracking-tight flex items-center gap-1 shadow-2xs" title="Ficha verificada y correcta">
+                        <CheckCircle2 size={9} />
+                        <span>Verificada</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 

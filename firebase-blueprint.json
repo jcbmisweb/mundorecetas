@@ -45,6 +45,7 @@
         "platingInstructions": { "type": "string" },
         "serviceDetails": { "type": "object" },
         "extraAllergens": { "type": "array", "items": { "type": "string" } },
+        "isVerified": { "type": "boolean" },
         "lastModified": { "type": "number" },
         "totalCost": { "type": "number" }
       },

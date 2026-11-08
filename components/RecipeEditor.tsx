@@ -84,6 +84,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   const [sourceUrl, setSourceUrl] = useState('');
   const [recipeVideos, setRecipeVideos] = useState<VideoLink[]>([]);
   const [isPublic, setIsPublic] = useState(false);
+  const [isVerified, setIsVerified] = useState<boolean>(initialRecipe?.isVerified ?? false);
   const [platingInstructions, setPlatingInstructions] = useState('');
   const [presentation, setPresentation] = useState('');
   const [importantNotes, setImportantNotes] = useState('');
@@ -199,6 +200,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       setSourceUrl(sanitizeVideoUrl(initialRecipe.sourceUrl) || '');
       setRecipeVideos(normalizeVideos(initialRecipe.videos, initialRecipe.sourceUrl || initialRecipe.videoUrl));
       setIsPublic(initialRecipe.isPublic || false);
+      setIsVerified(initialRecipe.isVerified ?? false);
       setServiceDetails(initialRecipe.serviceDetails || emptyServiceDetails);
       setRecipeType(initialRecipe.recipeType || initialRecipe.takeAwayDetails?.recipeType || (initialRecipe.takeAwayDetails?.isTakeAway ? 'takeaway' : 'normal'));
       setPastryInfographic(initialRecipe.pastryInfographic || initialRecipe.takeAwayDetails?.pastryInfographic || '');
@@ -623,6 +625,8 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           allergens: currentRecipeAllergens
         },
         linkedRecipeIds,
+        isVerified: Boolean(isVerified),
+        verifiedAt: isVerified ? (initialRecipe?.verifiedAt || Date.now()) : undefined,
         lastModified: Date.now()
       } as any);
     } catch (error: any) {
@@ -1097,6 +1101,22 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                     className={`w-full px-4 py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${isPublic ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-200' : 'bg-slate-50 text-slate-400 border-2 border-slate-100 hover:bg-slate-100'}`}
                   >
                     {isPublic ? 'Pública (Visible para todos)' : 'Privada (Solo mi equipo)'}
+                  </button>
+               </div>
+               <div className="p-4">
+                  <label className="block text-[10px] font-black text-emerald-700 uppercase mb-2">Estado de Verificación</label>
+                  <button 
+                    type="button" 
+                    onClick={() => setIsVerified(!isVerified)}
+                    className={`w-full px-4 py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${
+                      isVerified 
+                        ? 'bg-emerald-600 text-white shadow-md border-2 border-emerald-700' 
+                        : 'bg-slate-50 text-slate-400 border-2 border-slate-100 hover:bg-slate-100'
+                    }`}
+                    title="Marca esta casilla cuando la receta haya sido elaborada, probada y validada como correcta"
+                  >
+                    <CheckCircle2 size={15} className={isVerified ? 'text-white' : 'text-slate-400'} />
+                    <span>{isVerified ? '✓ VERIFICADA Y CORRECTA' : 'Pendiente de verificar'}</span>
                   </button>
                </div>
                <div className="md:col-span-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
