@@ -662,7 +662,20 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
             <span className="truncate">{name.trim() || (initialRecipe ? 'Editar Ficha' : 'Nueva Ficha Técnica')}</span>
           </h2>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsVerified(!isVerified)}
+            className={`px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md ${
+              isVerified
+                ? 'bg-emerald-600 text-white border-2 border-emerald-700'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200'
+            }`}
+            title="Haz clic para marcar / desmarcar esta receta como verificada y correcta"
+          >
+            <CheckCircle2 size={16} className={isVerified ? 'text-white' : 'text-slate-400'} />
+            <span>{isVerified ? '✓ Verificada' : 'Sin verificar'}</span>
+          </button>
           <button 
             type="button"
             onClick={handleSave} 
