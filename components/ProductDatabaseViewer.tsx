@@ -6,7 +6,7 @@ import {
   Search, Plus, ArrowLeft, Edit2, Trash2, Save, X, Shield, Check, Download, 
   Upload, DollarSign, Database, AlertTriangle, AlertCircle, FileSpreadsheet, 
   Clock, ArrowRight, RefreshCw, Utensils, Ban, Percent, Truck, CheckSquare, 
-  Square, Layers, Tag, Sparkles 
+  Square, Layers, Tag, Sparkles, ChevronDown 
 } from 'lucide-react';
 import { findSimilarProducts, normalizeText, extractDifferenceNote } from '../lib/productUtils';
 
@@ -821,246 +821,302 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
         </div>
       )}
 
-      {/* Editor de Producto */}
+      {/* Editor de Producto (Diseño Apaisado y Compacto para portátiles y pantallas de ordenador) */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-fadeIn">
-          <div className="bg-white rounded-[2rem] shadow-2xl max-w-lg w-full overflow-hidden">
-            <div className="bg-slate-900 text-white px-8 py-5 flex justify-between items-center">
-              <h2 className="text-xl font-black uppercase tracking-tighter">{isCreating ? 'Añadir Género' : 'Ficha de Registro'}</h2>
-              <button onClick={() => setEditingProduct(null)}><X size={24}/></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111322]/85 backdrop-blur-md p-2 sm:p-4 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden my-auto flex flex-col max-h-[94vh]">
+            {/* Cabecera Compacta */}
+            <div className="bg-[#111322] text-white px-5 sm:px-7 py-3 sm:py-3.5 flex justify-between items-center shrink-0 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 shrink-0">
+                  <Plus size={16} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-black uppercase tracking-tight">{isCreating ? 'Añadir Género al Catálogo' : 'Ficha de Registro de Producto'}</h2>
+                  <p className="text-[9px] text-slate-400 font-medium hidden sm:block">Inventario y escandallos · Vista apaisada optimizada para pantallas pequeñas de ordenador</p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setEditingProduct(null)} 
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                title="Cerrar ventana"
+              >
+                <X size={20}/>
+              </button>
             </div>
-            <form onSubmit={handleSave} className="p-8 space-y-6">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Familia / Categoría de Pedido</label>
-                <input required type="text" value={editingProduct.category || ''} onChange={e => setEditingProduct({...editingProduct, category: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900" placeholder="Ej: CARNES, LÁCTEOS..." />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Nombre del Producto (Sin familia)</label>
-                <input required type="text" value={editingProduct.name || ''} onChange={e => setEditingProduct({...editingProduct, name: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900" placeholder="Ej: SOLOMILLO DE TERNERA" />
-              </div>
 
-              {isCreating && (() => {
-                const similarProducts = findSimilarProducts(editingProduct.name, products);
-                if (similarProducts.length === 0) return null;
-                return (
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2 animate-fadeIn">
-                    <div className="flex items-center gap-2 text-amber-900 text-xs font-black uppercase">
-                      <AlertCircle size={15} className="text-amber-600 shrink-0" />
-                      <span>¿Similar o cambiar por producto existente?</span>
-                    </div>
-                    <p className="text-[10px] text-amber-800 leading-snug font-medium">
-                      Si solo cambia una palabra o formato, puedes cambiarlo por uno existente sin duplicar el catálogo:
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {similarProducts.map(sim => (
+            {/* Formulario en 2 Columnas (Apaisado) con scroll interno */}
+            <form onSubmit={handleSave} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 items-start">
+                {/* COLUMNA 1 (IZQUIERDA): Categoría, Nombre, Sugerencias y Alternativas */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider">Familia / Categoría de Pedido</label>
+                    <input 
+                      required 
+                      type="text" 
+                      value={editingProduct.category || ''} 
+                      onChange={e => setEditingProduct({...editingProduct, category: e.target.value.toUpperCase()})} 
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-800 text-xs shadow-2xs transition-all" 
+                      placeholder="EJ: CARNES, LÁCTEOS..." 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider">Nombre del Producto (Sin familia)</label>
+                    <input 
+                      required 
+                      type="text" 
+                      value={editingProduct.name || ''} 
+                      onChange={e => setEditingProduct({...editingProduct, name: e.target.value.toUpperCase()})} 
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-black uppercase outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-900 text-xs shadow-2xs transition-all" 
+                      placeholder="EJ: SOLOMILLO DE TERNERA" 
+                    />
+                  </div>
+
+                  {isCreating && (() => {
+                    const similarProducts = findSimilarProducts(editingProduct.name, products);
+                    if (similarProducts.length === 0) return null;
+                    return (
+                      <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-2.5 space-y-1 animate-fadeIn">
+                        <div className="flex items-center gap-1.5 text-amber-900 text-[9.5px] font-black uppercase">
+                          <AlertCircle size={12} className="text-amber-600 shrink-0" />
+                          <span>¿Similar o cambiar por existente?</span>
+                        </div>
+                        <p className="text-[9px] text-amber-900 leading-snug">
+                          Si solo cambia una palabra o formato, cámbialo directamente sin duplicar el catálogo:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {similarProducts.map(sim => (
+                            <button
+                              key={sim.id}
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`¿Sustituir "${editingProduct.name}" por "${sim.name}" en tus recetas asociadas?`)) {
+                                  onReplaceIngredient?.(editingProduct.name, sim);
+                                  setEditingProduct(null);
+                                }
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-emerald-600 hover:text-white text-slate-800 border border-amber-300 hover:border-emerald-600 rounded-lg text-[9px] font-black uppercase shadow-2xs transition-all group"
+                            >
+                              <Check size={10} className="text-emerald-600 group-hover:text-white" />
+                              <span>Cambiar por: <strong>{sim.name}</strong> ({sim.pricePerUnit ? `${sim.pricePerUnit}€` : '0€'}/{sim.unit})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Opciones directas si era un ingrediente de receta */}
+                  {isCreating && (
+                    <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 text-[10px]">
+                      <span className="text-slate-500 font-bold uppercase text-[8.5px]">¿No es producto almacén?:</span>
+                      <div className="flex items-center gap-1.5 w-full sm:w-auto">
                         <button
-                          key={sim.id}
                           type="button"
                           onClick={() => {
-                            if (confirm(`¿Sustituir "${editingProduct.name}" por "${sim.name}" en tus recetas asociadas?`)) {
-                              onReplaceIngredient?.(editingProduct.name, sim);
+                            if (confirm(`¿Marcar "${editingProduct.name}" como "Pertenece a la ficha"?\nNo se creará en inventario.`)) {
+                              onMarkInternalPrep?.(editingProduct.name);
                               setEditingProduct(null);
                             }
                           }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-600 hover:text-white text-slate-800 border border-amber-300 hover:border-emerald-600 rounded-xl text-[10px] font-black uppercase shadow-xs transition-all group"
+                          className="flex-1 sm:flex-initial text-[8.5px] font-black uppercase text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg border border-indigo-200 transition-all flex items-center justify-center gap-1"
                         >
-                          <Check size={12} className="text-emerald-600 group-hover:text-white" />
-                          <span>Cambiar por: <strong>{sim.name}</strong> ({sim.pricePerUnit ? `${sim.pricePerUnit}€` : '0€'}/{sim.unit})</span>
+                          <Utensils size={10} /> De la ficha
                         </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Precio Mercado €</label>
-                  <div className="relative">
-                    <input type="text" value={editingProduct.pricePerUnit} onChange={e => setEditingProduct({...editingProduct, pricePerUnit: e.target.value as any})} className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-mono font-bold outline-none focus:ring-2 focus:ring-slate-900" placeholder="0.00" />
-                    <DollarSign className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" size={16}/>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Unidad</label>
-                  <select value={editingProduct.unit} onChange={e => setEditingProduct({...editingProduct, unit: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none">
-                    <option value="kg">kg</option>
-                    <option value="L">L</option>
-                    <option value="unidad">unidad / ud</option>
-                    <option value="g">g</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Nuevas funcionalidades: Proveedor habitual y % de merma estimado */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 flex items-center gap-1">
-                    <Truck size={12} className="text-slate-500" /> Proveedor Habitual
-                  </label>
-                  <input 
-                    type="text" 
-                    value={editingProduct.supplier || ''} 
-                    onChange={e => setEditingProduct({...editingProduct, supplier: e.target.value.toUpperCase()})} 
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs uppercase outline-none focus:ring-2 focus:ring-slate-900" 
-                    placeholder="Ej: MAKRO, MERCAMURCIA..." 
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 flex items-center gap-1">
-                    <Percent size={12} className="text-slate-500" /> % Merma Estimada
-                  </label>
-                  <div className="relative">
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="90" 
-                      value={editingProduct.wastePercentage ?? ''} 
-                      onChange={e => setEditingProduct({...editingProduct, wastePercentage: parseFloat(e.target.value) || undefined})} 
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-mono font-bold text-xs outline-none focus:ring-2 focus:ring-slate-900" 
-                      placeholder="Ej: 15" 
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Indicador de Coste Neto Usable con Merma */}
-              {editingProduct.wastePercentage && editingProduct.wastePercentage > 0 && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-emerald-900 text-xs">
-                  <span className="font-bold flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Coste real limpio (con {editingProduct.wastePercentage}% merma):
-                  </span>
-                  <span className="font-mono font-black text-emerald-700 text-sm">
-                    {(() => {
-                      const waste = editingProduct.wastePercentage || 0;
-                      const factor = Math.max(0.01, 1 - (waste / 100));
-                      const cleanCost = (Number(parseSmartPrice(editingProduct.pricePerUnit)) || 0) / factor;
-                      return `${cleanCost.toFixed(3).replace('.', ',')}€/${editingProduct.unit}`;
-                    })()}
-                  </span>
-                </div>
-              )}
-
-              {editingProduct.unit === 'unidad' && (
-                <div className="animate-fadeIn">
-                  <label className="block text-[10px] font-black text-amber-600 uppercase mb-2">Peso por Unidad (gramos)</label>
-                  <div className="relative">
-                    <input 
-                      type="number" 
-                      value={editingProduct.weightPerUnit || ''} 
-                      onChange={e => setEditingProduct({...editingProduct, weightPerUnit: parseFloat(e.target.value) || undefined})} 
-                      className="w-full px-5 py-3 bg-amber-50 border border-amber-100 rounded-2xl font-mono font-bold outline-none focus:ring-2 focus:ring-amber-500" 
-                      placeholder="Ej: 60" 
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-amber-300 font-bold text-xs">g</span>
-                  </div>
-                  <p className="text-[9px] text-amber-500 font-bold mt-1 italic">Necesario para convertir de gramos a unidades automáticamente.</p>
-                </div>
-              )}
-
-              {/* Control de Alérgenos Compacto y Ultra Funcional */}
-              {(() => {
-                const currentAllergens = Array.isArray(editingProduct.allergens) ? editingProduct.allergens : [];
-                return (
-                  <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-100 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
-                          Alérgenos ({currentAllergens.length})
-                        </span>
-                        {currentAllergens.length === 0 && (
-                          <span className="text-[8.5px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                            ✓ Sin alérgenos declarados
-                          </span>
-                        )}
-                      </div>
-                      {currentAllergens.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => setEditingProduct({...editingProduct, allergens: []})}
-                          className="text-[9px] font-bold text-rose-600 hover:text-rose-800 uppercase tracking-wider hover:underline"
+                          onClick={() => {
+                            if (confirm(`¿Marcar "${editingProduct.name}" como "No es un producto"?\nNo se creará en inventario.`)) {
+                              onMarkNonProduct?.(editingProduct.name);
+                              setEditingProduct(null);
+                            }
+                          }}
+                          className="flex-1 sm:flex-initial text-[8.5px] font-black uppercase text-stone-700 bg-stone-100 hover:bg-stone-200 px-2 py-1 rounded-lg border border-stone-200 transition-all flex items-center justify-center gap-1"
                         >
-                          Limpiar todos
+                          <Ban size={10} /> No es producto
                         </button>
-                      )}
+                      </div>
                     </div>
-
-                    <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 pt-1">
-                      {ALLERGEN_LIST.map(a => {
-                        const isSel = currentAllergens.includes(a);
-                        return (
-                          <button 
-                            key={a} 
-                            type="button" 
-                            onClick={() => toggleAllergen(a)} 
-                            className={`p-1.5 rounded-xl text-[8.5px] font-black border transition-all uppercase flex flex-col items-center justify-center gap-1 ${
-                              isSel 
-                                ? 'bg-rose-50 border-rose-400 text-rose-800 shadow-xs ring-1 ring-rose-300' 
-                                : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 opacity-60 hover:opacity-100'
-                            }`}
-                            title={a}
-                          >
-                            <AllergenIcon allergen={a} size={16} />
-                            <span className="truncate max-w-full text-[7.5px] tracking-tighter">{a}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Opciones directas si era un ingrediente de receta */}
-              {isCreating && (
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 text-[10px]">
-                  <span className="text-slate-400 font-bold uppercase">¿No es producto almacén?:</span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`¿Marcar "${editingProduct.name}" como "Pertenece a la ficha"?\nNo se creará en inventario.`)) {
-                          onMarkInternalPrep?.(editingProduct.name);
-                          setEditingProduct(null);
-                        }
-                      }}
-                      className="text-[9px] font-black uppercase text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-all flex items-center gap-1"
-                    >
-                      <Utensils size={10} /> Pertenece a la ficha
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`¿Marcar "${editingProduct.name}" como "No es un producto"?\nNo se creará en inventario.`)) {
-                          onMarkNonProduct?.(editingProduct.name);
-                          setEditingProduct(null);
-                        }
-                      }}
-                      className="text-[9px] font-black uppercase text-stone-700 bg-stone-100 hover:bg-stone-200 px-2.5 py-1 rounded-lg border border-stone-200 transition-all flex items-center gap-1"
-                    >
-                      <Ban size={10} /> No es producto
-                    </button>
-                  </div>
+                  )}
                 </div>
-              )}
 
-              <div className="flex gap-2.5 pt-2">
+                {/* COLUMNA 2 (DERECHA): Precios, Proveedor, Merma y Alérgenos */}
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider">Precio Mercado €</label>
+                      <div className="relative">
+                        <input 
+                          type="text" 
+                          value={editingProduct.pricePerUnit} 
+                          onChange={e => setEditingProduct({...editingProduct, pricePerUnit: e.target.value as any})} 
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-black outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-900 text-xs shadow-2xs" 
+                          placeholder="0.00" 
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">€</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider">Unidad</label>
+                      <div className="relative">
+                        <select 
+                          value={editingProduct.unit} 
+                          onChange={e => setEditingProduct({...editingProduct, unit: e.target.value})} 
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none appearance-none cursor-pointer text-slate-800 text-xs shadow-2xs focus:ring-2 focus:ring-slate-900 focus:bg-white"
+                        >
+                          <option value="kg">kg</option>
+                          <option value="L">L</option>
+                          <option value="unidad">unidad / ud</option>
+                          <option value="g">g</option>
+                          <option value="ml">ml</option>
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Proveedor habitual y % de merma estimado */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider flex items-center gap-1">
+                        <Truck size={10} className="text-slate-400" /> Proveedor Habitual
+                      </label>
+                      <input 
+                        type="text" 
+                        value={editingProduct.supplier || ''} 
+                        onChange={e => setEditingProduct({...editingProduct, supplier: e.target.value.toUpperCase()})} 
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-800 shadow-2xs" 
+                        placeholder="MAKRO, MERCAMURCIA..." 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider flex items-center gap-1">
+                        <Percent size={10} className="text-slate-400" /> % Merma Estimada
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          min="0" 
+                          max="90" 
+                          value={editingProduct.wastePercentage ?? ''} 
+                          onChange={e => setEditingProduct({...editingProduct, wastePercentage: parseFloat(e.target.value) || undefined})} 
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-black text-xs outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-800 shadow-2xs" 
+                          placeholder="Ej: 15" 
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Coste Neto Calculado */}
+                  {editingProduct.wastePercentage && editingProduct.wastePercentage > 0 && (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-emerald-900 text-[10px]">
+                      <span className="font-bold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Coste real con {editingProduct.wastePercentage}% merma:
+                      </span>
+                      <span className="font-mono font-black text-emerald-800">
+                        {(() => {
+                          const waste = editingProduct.wastePercentage || 0;
+                          const factor = Math.max(0.01, 1 - (waste / 100));
+                          const cleanCost = (Number(parseSmartPrice(editingProduct.pricePerUnit)) || 0) / factor;
+                          return `${cleanCost.toFixed(3).replace('.', ',')}€/${editingProduct.unit}`;
+                        })()}
+                      </span>
+                    </div>
+                  )}
+
+                  {(editingProduct.unit === 'unidad' || editingProduct.unit === 'ud') && (
+                    <div className="animate-fadeIn">
+                      <label className="block text-[10px] font-black text-amber-700 uppercase mb-1 tracking-wider">Peso por Unidad (gramos)</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          value={editingProduct.weightPerUnit || ''} 
+                          onChange={e => setEditingProduct({...editingProduct, weightPerUnit: parseFloat(e.target.value) || undefined})} 
+                          className="w-full px-3 py-1.5 bg-amber-50/80 border border-amber-300 rounded-xl font-bold outline-none focus:ring-2 focus:ring-amber-400 text-amber-950 text-xs shadow-2xs" 
+                          placeholder="Ej: 60" 
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-600 font-bold text-xs">g</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Alérgenos */}
+                  {(() => {
+                    const currentAllergens = Array.isArray(editingProduct.allergens) ? editingProduct.allergens : [];
+                    return (
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider">
+                            Alérgenos Declarados ({currentAllergens.length})
+                          </span>
+                          {currentAllergens.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingProduct({...editingProduct, allergens: []})}
+                              className="text-[8px] font-bold text-rose-600 hover:text-rose-800 uppercase tracking-wider hover:underline"
+                            >
+                              Quitar todos
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-7 gap-1">
+                          {ALLERGEN_LIST.map(a => {
+                            const isSel = currentAllergens.includes(a);
+                            return (
+                              <button 
+                                key={a} 
+                                type="button" 
+                                onClick={() => toggleAllergen(a)} 
+                                className={`p-1 rounded-lg text-[7px] font-black border transition-all uppercase flex flex-col items-center justify-center gap-0.5 ${
+                                  isSel 
+                                    ? 'bg-rose-50 border-rose-400 text-rose-900 shadow-2xs ring-1 ring-rose-300' 
+                                    : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 opacity-60 hover:opacity-100'
+                                }`}
+                                title={a}
+                              >
+                                <AllergenIcon allergen={a} size={13} />
+                                <span className="truncate max-w-full tracking-tighter leading-none">{a.substring(0, 4)}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Pie de acciones apaisado y accesible */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button 
+                  type="button"
+                  onClick={() => setEditingProduct(null)} 
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold uppercase text-xs tracking-wider transition-colors"
+                >
+                  Cancelar
+                </button>
                 {pendingCurrentIndex !== null && pendingCurrentIndex + 1 < filteredPendingIngredients.length && (
                   <button 
                     type="button" 
                     onClick={() => handleSaveAndAdvance(undefined, true)}
-                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-3.5 px-4 rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-1.5"
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center gap-1.5"
                     title="Guarda este producto y abre de inmediato el siguiente ingrediente pendiente sin salir"
                   >
                     <span>Guardar y Siguiente</span>
-                    <ArrowRight size={16} />
+                    <ArrowRight size={13} />
                   </button>
                 )}
                 <button 
                   type="submit" 
-                  className="flex-1 bg-slate-900 text-white py-3.5 px-4 rounded-2xl font-black text-xs uppercase tracking-wider shadow-xl transition-all hover:bg-slate-800"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-md hover:shadow-lg transition-all flex items-center gap-1.5"
                 >
-                  Guardar en Catálogo
+                  <Save size={13} />
+                  <span>Guardar en Catálogo</span>
                 </button>
               </div>
             </form>

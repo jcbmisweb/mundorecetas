@@ -2067,251 +2067,303 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       </div>
 
       {quickAddProduct && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#111322]/90 backdrop-blur-md p-4 animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] max-w-[540px] w-full overflow-visible border border-white/10 my-8">
-            <div className="bg-[#111322] text-white px-10 py-10 flex justify-between items-center rounded-t-[2.5rem]">
-              <h2 className="text-[26px] font-black uppercase tracking-tight">Añadir Género</h2>
-              <button onClick={() => setQuickAddProduct(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                <X size={32} />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#111322]/85 backdrop-blur-md p-2 sm:p-4 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden my-auto flex flex-col max-h-[94vh]">
+            {/* Cabecera Compacta y Apaisada */}
+            <div className="bg-[#111322] text-white px-5 sm:px-7 py-3 sm:py-3.5 flex justify-between items-center shrink-0 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 shrink-0">
+                  <Plus size={16} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-black uppercase tracking-tight">Añadir Género al Catálogo</h2>
+                  <p className="text-[9px] text-slate-400 font-medium hidden sm:block">Ficha técnica de ingrediente y escandallo · Vista apaisada para pantallas de ordenador</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setQuickAddProduct(null)} 
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                title="Cerrar ventana"
+              >
+                <X size={20} />
               </button>
             </div>
             
-            <form onSubmit={handleSaveQuickProduct} className="p-10 space-y-9 overflow-visible">
-              <div className="relative">
-                <label className="block text-[10px] font-black text-[#94A3B8] uppercase mb-2 tracking-[0.1em]">Familia / Categoría de Pedido</label>
-                <div className="relative">
-                  <input 
-                    required type="text" value={familySearch} 
-                    onFocus={() => setShowFamilyList(true)}
-                    onBlur={() => setTimeout(() => setShowFamilyList(false), 200)}
-                    onChange={e => { setFamilySearch(e.target.value.toUpperCase()); setShowFamilyList(true); }} 
-                    className="w-full px-7 py-5 bg-[#F8FAFC] border-none rounded-2xl font-black uppercase outline-none focus:ring-2 focus:ring-slate-100 text-slate-700 text-lg shadow-sm" 
-                    placeholder="BUSCAR O CREAR FAMILIA..." 
-                  />
-                  <ChevronDown className={`absolute right-7 top-1/2 -translate-y-1/2 text-slate-300 transition-transform ${showFamilyList ? 'rotate-180' : ''}`} size={20} />
-                </div>
-                {showFamilyList && (
-                  <div className="absolute z-[110] left-0 right-0 top-full mt-2 bg-white border border-slate-100 shadow-2xl rounded-2xl overflow-hidden max-h-48 overflow-y-auto animate-fadeIn custom-scrollbar">
-                    {filteredFamilies.length > 0 ? (
-                      filteredFamilies.map(f => (
-                        <div key={f} onClick={() => { setFamilySearch(f); setShowFamilyList(false); }} className="px-6 py-4 hover:bg-slate-50 cursor-pointer text-[10px] font-black uppercase text-slate-600 border-b border-slate-50 last:border-0 flex justify-between items-center">
-                          <span>{f}</span>
-                          <CheckCircle2 size={12} className="text-slate-200" />
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-6 py-4 text-[10px] font-black text-amber-500 uppercase bg-amber-50">Crear familia: "{familySearch}"</div>
+            {/* Formulario en 2 Columnas (Apaisado) con scroll interno fluido */}
+            <form onSubmit={handleSaveQuickProduct} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 items-start">
+                {/* COLUMNA 1 (IZQUIERDA): Clasificación, Denominación y Sugerencias */}
+                <div className="space-y-3">
+                  {/* Familia / Categoría */}
+                  <div className="relative">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider">Familia / Categoría de Pedido</label>
+                    <div className="relative">
+                      <input 
+                        required 
+                        type="text" 
+                        value={familySearch} 
+                        onFocus={() => setShowFamilyList(true)}
+                        onBlur={() => setTimeout(() => setShowFamilyList(false), 200)}
+                        onChange={e => { setFamilySearch(e.target.value.toUpperCase()); setShowFamilyList(true); }} 
+                        className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-800 text-xs shadow-2xs transition-all" 
+                        placeholder="BUSCAR O CREAR FAMILIA..." 
+                      />
+                      <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none transition-transform ${showFamilyList ? 'rotate-180' : ''}`} size={16} />
+                    </div>
+                    {showFamilyList && (
+                      <div className="absolute z-[110] left-0 right-0 top-full mt-1 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden max-h-36 overflow-y-auto animate-fadeIn custom-scrollbar">
+                        {filteredFamilies.length > 0 ? (
+                          filteredFamilies.map(f => (
+                            <div key={f} onClick={() => { setFamilySearch(f); setShowFamilyList(false); }} className="px-3.5 py-1.5 hover:bg-slate-50 cursor-pointer text-[10px] font-bold uppercase text-slate-700 border-b border-slate-100 last:border-0 flex justify-between items-center">
+                              <span>{f}</span>
+                              <CheckCircle2 size={12} className="text-slate-300" />
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-3.5 py-1.5 text-[10px] font-bold text-amber-600 uppercase bg-amber-50">Crear familia: "{familySearch}"</div>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-[#94A3B8] uppercase mb-2 tracking-[0.1em]">Nombre del Producto</label>
-                <input required type="text" value={quickAddProduct.name} onChange={e => setQuickAddProduct({...quickAddProduct, name: e.target.value.toUpperCase()})} className="w-full px-7 py-5 bg-[#F8FAFC] border-none rounded-2xl font-black uppercase outline-none focus:ring-2 focus:ring-slate-100 text-slate-700 text-lg shadow-sm" placeholder="EJ: SOLOMILLO DE TERNERA" />
-              </div>
-
-              {(() => {
-                const similarProducts = findSimilarProducts(quickAddProduct.name, productDatabase, 4);
-                if (similarProducts.length === 0) return null;
-                return (
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-2.5 animate-fadeIn">
-                    <div className="flex items-center gap-2 text-amber-900 text-xs font-black uppercase">
-                      <AlertCircle size={16} className="text-amber-600 shrink-0" />
-                      <span>¿Similar o cambiar por producto existente?</span>
-                    </div>
-                    <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
-                      Si solo cambia una palabra o formato, puedes cambiarlo directamente por un producto del catálogo sin dar de alta uno duplicado:
-                    </p>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {similarProducts.map(sim => (
-                        <button
-                          key={sim.id}
-                          type="button"
-                          onClick={() => handleSelectSimilarInEditor(sim)}
-                          className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-emerald-600 hover:text-white text-slate-800 border border-amber-300 hover:border-emerald-600 rounded-xl text-[11px] font-black uppercase shadow-xs transition-all group"
-                        >
-                          <Check size={13} className="text-emerald-600 group-hover:text-white" />
-                          <span>Cambiar por: <strong>{sim.name}</strong> ({sim.pricePerUnit ? `${sim.pricePerUnit}€` : '0€'}/{sim.unit})</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-[#94A3B8] uppercase mb-1.5 tracking-[0.1em]">Precio Mercado €</label>
-                  <div className="relative">
+                  {/* Nombre del Producto */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider">Nombre del Producto</label>
                     <input 
                       required 
                       type="text" 
-                      value={quickAddProduct.pricePerUnit} 
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (/^[0-9.,]*$/.test(val)) {
-                          setQuickAddProduct({...quickAddProduct, pricePerUnit: val as any});
-                        }
-                      }} 
-                      onBlur={e => {
-                        const val = e.target.value;
-                        let s = val.replace(',', '.');
-                        const num = parseFloat(s) || 0;
-                        setQuickAddProduct({...quickAddProduct, pricePerUnit: num});
-                      }}
-                      className="w-full px-5 py-3.5 bg-[#F8FAFC] border-none rounded-2xl font-black outline-none focus:ring-2 focus:ring-slate-100 text-slate-700 text-base shadow-sm" 
+                      value={quickAddProduct.name} 
+                      onChange={e => setQuickAddProduct({...quickAddProduct, name: e.target.value.toUpperCase()})} 
+                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-black uppercase outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-900 text-xs shadow-2xs transition-all" 
+                      placeholder="EJ: PEPINO HOLANDÉS" 
                     />
-                    <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[#CBD5E1] font-bold text-lg">€</span>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-[#94A3B8] uppercase mb-1.5 tracking-[0.1em]">Unidad</label>
-                  <div className="relative">
-                    <select value={quickAddProduct.unit} onChange={e => setQuickAddProduct({...quickAddProduct, unit: e.target.value})} className="w-full px-5 py-3.5 bg-[#F8FAFC] border-none rounded-2xl font-black outline-none appearance-none cursor-pointer text-slate-700 text-base shadow-sm">
-                      <option value="kg">kg</option>
-                      <option value="L">L</option>
-                      <option value="ud">ud / unidad</option>
-                      <option value="g">g</option>
-                      <option value="ml">ml</option>
-                    </select>
-                    <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
-                  </div>
-                </div>
-              </div>
 
-              {/* Nuevas funcionalidades: Proveedor habitual y % Merma estimada */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-[#94A3B8] uppercase mb-1.5 tracking-[0.1em] flex items-center gap-1">
-                    <Truck size={12} className="text-slate-400" /> Proveedor Habitual
-                  </label>
-                  <input 
-                    type="text" 
-                    value={quickAddProduct.supplier || ''} 
-                    onChange={e => setQuickAddProduct({...quickAddProduct, supplier: e.target.value.toUpperCase()})} 
-                    className="w-full px-5 py-3.5 bg-[#F8FAFC] border-none rounded-2xl font-black uppercase outline-none focus:ring-2 focus:ring-slate-100 text-slate-700 text-xs shadow-sm" 
-                    placeholder="Ej: MAKRO, MERCAMURCIA..." 
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-[#94A3B8] uppercase mb-1.5 tracking-[0.1em] flex items-center gap-1">
-                    <Percent size={12} className="text-slate-400" /> % Merma Estimada
-                  </label>
-                  <div className="relative">
-                    <input 
-                      type="number" 
-                      min="0"
-                      max="90"
-                      value={quickAddProduct.wastePercentage ?? ''} 
-                      onChange={e => setQuickAddProduct({...quickAddProduct, wastePercentage: parseFloat(e.target.value) || undefined})} 
-                      className="w-full px-5 py-3.5 bg-[#F8FAFC] border-none rounded-2xl font-mono font-black outline-none focus:ring-2 focus:ring-slate-100 text-slate-700 text-xs shadow-sm" 
-                      placeholder="Ej: 15" 
-                    />
-                    <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">%</span>
-                  </div>
-                </div>
-              </div>
+                  {/* Sugerencias de Productos Similares en Catálogo (Compacto) */}
+                  {(() => {
+                    const similarProducts = findSimilarProducts(quickAddProduct.name, productDatabase, 3);
+                    if (similarProducts.length === 0) return null;
+                    return (
+                      <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-2.5 space-y-1 animate-fadeIn">
+                        <div className="flex items-center gap-1.5 text-amber-900 text-[9.5px] font-black uppercase">
+                          <AlertCircle size={12} className="text-amber-600 shrink-0" />
+                          <span>¿Similar o cambiar por existente?</span>
+                        </div>
+                        <p className="text-[9px] text-amber-900 leading-snug">
+                          Si solo cambia el formato, cámbialo directamente sin duplicar el catálogo:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {similarProducts.map(sim => (
+                            <button
+                              key={sim.id}
+                              type="button"
+                              onClick={() => handleSelectSimilarInEditor(sim)}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-emerald-600 hover:text-white text-slate-800 border border-amber-300 hover:border-emerald-600 rounded-lg text-[9px] font-black uppercase shadow-2xs transition-all group"
+                            >
+                              <Check size={10} className="text-emerald-600 group-hover:text-white" />
+                              <span>Cambiar por: <strong>{sim.name}</strong> ({sim.pricePerUnit ? `${sim.pricePerUnit}€` : '0€'}/{sim.unit})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
-              {/* Coste Neto Calculado en Vivo con Merma */}
-              {quickAddProduct.wastePercentage && quickAddProduct.wastePercentage > 0 && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-emerald-900 text-xs">
-                  <span className="font-bold flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Coste real limpio (con {quickAddProduct.wastePercentage}% merma):
-                  </span>
-                  <span className="font-mono font-black text-emerald-700 text-sm">
-                    {(((parseFloat(String(quickAddProduct.pricePerUnit).replace(',', '.')) || 0) / Math.max(0.01, 1 - ((quickAddProduct.wastePercentage || 0) / 100)))).toFixed(3).replace('.', ',')}€/{quickAddProduct.unit}
-                  </span>
-                </div>
-              )}
-
-              {(quickAddProduct.unit === 'ud' || quickAddProduct.unit === 'unidad') && (
-                <div className="animate-fadeIn">
-                  <label className="block text-[10px] font-black text-amber-600 uppercase mb-1.5 tracking-[0.1em]">Peso por Unidad (gramos)</label>
-                  <div className="relative">
-                    <input 
-                      type="number" 
-                      value={quickAddProduct.weightPerUnit || ''} 
-                      onChange={e => setQuickAddProduct({...quickAddProduct, weightPerUnit: parseFloat(e.target.value) || undefined})} 
-                      className="w-full px-5 py-3.5 bg-amber-50 border-none rounded-2xl font-black outline-none focus:ring-2 focus:ring-amber-200 text-amber-900 text-sm shadow-sm" 
-                      placeholder="Ej: 60" 
-                    />
-                    <span className="absolute right-5 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-sm">g</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Selector de Alérgenos Compacto y Funcional */}
-              <div className="bg-[#F8FAFC] p-4 rounded-2xl border border-slate-100 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                    Alérgenos Declarados ({quickAddProduct.allergens.length})
-                  </span>
-                  {quickAddProduct.allergens.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setQuickAddProduct({...quickAddProduct, allergens: []})}
-                      className="text-[9px] font-bold text-rose-600 hover:text-rose-800 uppercase tracking-wider hover:underline"
-                    >
-                      Limpiar todos
-                    </button>
+                  {/* Acciones Rápidas Alternativas: Pertenece a la Ficha / No es Producto */}
+                  {quickAddTarget && (
+                    <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 text-[10px]">
+                      <span className="text-slate-500 font-bold uppercase text-[8.5px]">¿No es de almacén?:</span>
+                      <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => markIngredientInternal(quickAddTarget.subIdx, quickAddTarget.ingIdx)}
+                          className="flex-1 sm:flex-initial text-[8.5px] font-black uppercase text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg border border-indigo-200 transition-all flex items-center justify-center gap-1"
+                        >
+                          <Utensils size={10} /> De la ficha
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => markIngredientNonProduct(quickAddTarget.subIdx, quickAddTarget.ingIdx)}
+                          className="flex-1 sm:flex-initial text-[8.5px] font-black uppercase text-stone-700 bg-stone-100 hover:bg-stone-200 px-2 py-1 rounded-lg border border-stone-200 transition-all flex items-center justify-center gap-1"
+                        >
+                          <Ban size={10} /> No es producto
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 pt-1">
-                  {ALLERGEN_LIST.map(a => {
-                    const isSel = quickAddProduct.allergens.includes(a);
-                    return (
-                      <button 
-                        key={a} 
-                        type="button" 
-                        onClick={() => {
-                          const current = quickAddProduct.allergens;
-                          const updated = isSel ? current.filter(x => x !== a) : [...current, a];
-                          setQuickAddProduct({...quickAddProduct, allergens: updated});
-                        }} 
-                        className={`p-1.5 rounded-xl text-[8.5px] font-black border transition-all uppercase flex flex-col items-center justify-center gap-1 ${
-                          isSel 
-                            ? 'bg-rose-50 border-rose-400 text-rose-800 shadow-xs ring-1 ring-rose-300' 
-                            : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 opacity-60 hover:opacity-100'
-                        }`}
-                        title={a}
-                      >
-                        <AllergenIcon allergen={a} size={16} />
-                        <span className="truncate max-w-full text-[7.5px] tracking-tighter">{a}</span>
-                      </button>
-                    );
-                  })}
+                {/* COLUMNA 2 (DERECHA): Precios, Proveedor, Merma y Alérgenos */}
+                <div className="space-y-3">
+                  {/* Precio y Unidad */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider">Precio Mercado €</label>
+                      <div className="relative">
+                        <input 
+                          required 
+                          type="text" 
+                          value={quickAddProduct.pricePerUnit} 
+                          onChange={e => {
+                            const val = e.target.value;
+                            if (/^[0-9.,]*$/.test(val)) {
+                              setQuickAddProduct({...quickAddProduct, pricePerUnit: val as any});
+                            }
+                          }} 
+                          onBlur={e => {
+                            const val = e.target.value;
+                            let s = val.replace(',', '.');
+                            const num = parseFloat(s) || 0;
+                            setQuickAddProduct({...quickAddProduct, pricePerUnit: num});
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-black outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-900 text-xs shadow-2xs" 
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">€</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider">Unidad</label>
+                      <div className="relative">
+                        <select 
+                          value={quickAddProduct.unit} 
+                          onChange={e => setQuickAddProduct({...quickAddProduct, unit: e.target.value})} 
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none appearance-none cursor-pointer text-slate-800 text-xs shadow-2xs focus:ring-2 focus:ring-slate-900 focus:bg-white"
+                        >
+                          <option value="kg">kg</option>
+                          <option value="L">L</option>
+                          <option value="ud">ud / unidad</option>
+                          <option value="g">g</option>
+                          <option value="ml">ml</option>
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Proveedor y % Merma */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider flex items-center gap-1">
+                        <Truck size={10} className="text-slate-400" /> Proveedor
+                      </label>
+                      <input 
+                        type="text" 
+                        value={quickAddProduct.supplier || ''} 
+                        onChange={e => setQuickAddProduct({...quickAddProduct, supplier: e.target.value.toUpperCase()})} 
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold uppercase outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-800 text-xs shadow-2xs" 
+                        placeholder="MAKRO, MERCAMURCIA..." 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 tracking-wider flex items-center gap-1">
+                        <Percent size={10} className="text-slate-400" /> % Merma
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          min="0" 
+                          max="90" 
+                          value={quickAddProduct.wastePercentage ?? ''} 
+                          onChange={e => setQuickAddProduct({...quickAddProduct, wastePercentage: parseFloat(e.target.value) || undefined})} 
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-black outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white text-slate-800 text-xs shadow-2xs" 
+                          placeholder="Ej: 15" 
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Coste Neto Calculado en Vivo con Merma */}
+                  {quickAddProduct.wastePercentage && quickAddProduct.wastePercentage > 0 ? (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-emerald-900 text-[10px]">
+                      <span className="font-bold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Coste real con {quickAddProduct.wastePercentage}% merma:
+                      </span>
+                      <span className="font-mono font-black text-emerald-800">
+                        {(((parseFloat(String(quickAddProduct.pricePerUnit).replace(',', '.')) || 0) / Math.max(0.01, 1 - ((quickAddProduct.wastePercentage || 0) / 100)))).toFixed(3).replace('.', ',')}€/{quickAddProduct.unit}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {(quickAddProduct.unit === 'ud' || quickAddProduct.unit === 'unidad') && (
+                    <div className="animate-fadeIn">
+                      <label className="block text-[10px] font-black text-amber-700 uppercase mb-1 tracking-wider">Peso por Unidad (gramos)</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          value={quickAddProduct.weightPerUnit || ''} 
+                          onChange={e => setQuickAddProduct({...quickAddProduct, weightPerUnit: parseFloat(e.target.value) || undefined})} 
+                          className="w-full px-3 py-1.5 bg-amber-50/80 border border-amber-300 rounded-xl font-bold outline-none focus:ring-2 focus:ring-amber-400 text-amber-950 text-xs shadow-2xs" 
+                          placeholder="Ej: 60" 
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-600 font-bold text-xs">g</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Selector de Alérgenos Ultra Compacto (14 en rejilla 7x2) */}
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider">
+                        Alérgenos Declarados ({quickAddProduct.allergens.length})
+                      </span>
+                      {quickAddProduct.allergens.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setQuickAddProduct({...quickAddProduct, allergens: []})}
+                          className="text-[8px] font-bold text-rose-600 hover:text-rose-800 uppercase tracking-wider hover:underline"
+                        >
+                          Quitar todos
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1">
+                      {ALLERGEN_LIST.map(a => {
+                        const isSel = quickAddProduct.allergens.includes(a);
+                        return (
+                          <button 
+                            key={a} 
+                            type="button" 
+                            onClick={() => {
+                              const current = quickAddProduct.allergens;
+                              const updated = isSel ? current.filter(x => x !== a) : [...current, a];
+                              setQuickAddProduct({...quickAddProduct, allergens: updated});
+                            }} 
+                            className={`p-1 rounded-lg text-[7px] font-black border transition-all uppercase flex flex-col items-center justify-center gap-0.5 ${
+                              isSel 
+                                ? 'bg-rose-50 border-rose-400 text-rose-900 shadow-2xs ring-1 ring-rose-300' 
+                                : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 opacity-60 hover:opacity-100'
+                            }`}
+                            title={a}
+                          >
+                            <AllergenIcon allergen={a} size={13} />
+                            <span className="truncate max-w-full tracking-tighter leading-none">{a.substring(0, 4)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Acciones Rápidas Alternativas: Pertenece a la Ficha / No es Producto */}
-              {quickAddTarget && (
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-[10px]">
-                  <span className="text-slate-400 font-bold uppercase">¿No es de almacén?:</span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => markIngredientInternal(quickAddTarget.subIdx, quickAddTarget.ingIdx)}
-                      className="text-[9px] font-black uppercase text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 transition-all flex items-center gap-1"
-                    >
-                      <Utensils size={11} /> Pertenece a la ficha
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => markIngredientNonProduct(quickAddTarget.subIdx, quickAddTarget.ingIdx)}
-                      className="text-[9px] font-black uppercase text-stone-700 bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-xl border border-stone-200 transition-all flex items-center gap-1"
-                    >
-                      <Ban size={11} /> No es producto
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-2">
-                <button type="submit" className="w-full py-4 bg-[#111322] text-white rounded-2xl font-black uppercase text-sm tracking-[0.15em] shadow-xl hover:bg-slate-800 transition-all">
-                  Guardar en Catálogo y Aplicar
+              {/* Barra de Acciones Apaisada al Pie */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button 
+                  type="button"
+                  onClick={() => setQuickAddProduct(null)} 
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold uppercase text-xs tracking-wider transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-md hover:shadow-lg transition-all flex items-center gap-1.5"
+                >
+                  <Save size={13} />
+                  <span>Guardar en Catálogo y Aplicar</span>
                 </button>
               </div>
             </form>
