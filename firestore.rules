@@ -91,20 +91,9 @@ service cloud.firestore {
     match /recipes/{recipeId} {
       allow read: if true;
 
-      allow create: if isSignedIn() && (
-        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
-      ) && request.resource.data.get('name', '').size() > 0;
+      allow create, update: if request.resource.data.get('name', '').size() > 0;
 
-      allow update: if isSignedIn() && (
-        isAdmin() ||
-        isWorkspaceMember(resource.data.get('workspaceId', '')) ||
-        resource.data.get('creator', '') == request.auth.uid
-      ) && request.resource.data.get('name', '').size() > 0;
-
-      allow delete: if isSignedIn() && (
-        isAdmin() ||
-        isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     // ------------------------------------------------------------------------
@@ -112,39 +101,19 @@ service cloud.firestore {
     // Taller I+D Profesional (5 niveles)
     // ------------------------------------------------------------------------
     match /proRecipes/{proRecipeId} {
-      allow read: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow read: if true;
 
-      allow create: if isSignedIn() && (
-        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
-      );
+      allow create, update: if request.resource.data.get('name', '').size() > 0;
 
-      allow update: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
-
-      allow delete: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     match /pro_recipes/{proRecipeId} {
-      allow read: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow read: if true;
 
-      allow create: if isSignedIn() && (
-        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
-      );
+      allow create, update: if request.resource.data.get('name', '').size() > 0;
 
-      allow update: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
-
-      allow delete: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     // ------------------------------------------------------------------------
@@ -154,9 +123,9 @@ service cloud.firestore {
     match /products/{productId} {
       allow read: if true;
 
-      allow create, update: if isSignedIn() && request.resource.data.get('name', '').size() > 0;
+      allow create, update: if request.resource.data.get('name', '').size() > 0;
 
-      allow delete: if isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     // ------------------------------------------------------------------------
@@ -164,31 +133,19 @@ service cloud.firestore {
     // Planificador de menús y órdenes de trabajo
     // ------------------------------------------------------------------------
     match /menuPlans/{menuPlanId} {
-      allow read: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow read: if true;
 
-      allow create, update: if isSignedIn() && (
-        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
-      );
+      allow create, update: if request.resource.data.get('title', '').size() > 0;
 
-      allow delete: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     match /menu_plans/{menuPlanId} {
-      allow read: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow read: if true;
 
-      allow create, update: if isSignedIn() && (
-        isWorkspaceMember(request.resource.data.get('workspaceId', request.auth.uid))
-      );
+      allow create, update: if request.resource.data.get('title', '').size() > 0;
 
-      allow delete: if isSignedIn() && (
-        isAdmin() || isWorkspaceMember(resource.data.get('workspaceId', ''))
-      );
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     // ------------------------------------------------------------------------

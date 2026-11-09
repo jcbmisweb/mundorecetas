@@ -91,6 +91,13 @@ const notifyListeners = async (msg?: string) => {
   }
 };
 
+export const cleanForFirestore = <T>(obj: T): T => {
+  if (obj === null || obj === undefined) return obj;
+  return JSON.parse(JSON.stringify(obj, (_key, value) => {
+    return value === undefined ? null : value;
+  }));
+};
+
 /**
  * Executes a resilient, bidirectional synchronization:
  * 1. Uploads unsynced local recipes, products, and menus to Firebase Firestore.
@@ -122,6 +129,7 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
   let uploadedCount = 0;
   let downloadedCount = 0;
   let quotaHit = false;
+  let lastUploadError: string | null = null;
 
   try {
     const unsynced = await getUnsyncedLocalData();
@@ -131,18 +139,20 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
       for (const recipe of unsynced.recipes) {
         try {
           const fitted = await ensureRecipeFitsFirestore({ ...recipe, synced: true });
-          await setDoc(doc(db, 'recipes', recipe.id), fitted, { merge: true });
-          await localDB.recipes.update(recipe.id, { ...fitted, synced: true });
+          const safeRecipe = cleanForFirestore(fitted);
+          await setDoc(doc(db, 'recipes', recipe.id), safeRecipe, { merge: true });
+          await localDB.recipes.update(recipe.id, { ...safeRecipe, synced: true });
           uploadedCount++;
         } catch (err: any) {
           const errMsg = err?.message || String(err);
+          lastUploadError = errMsg;
           if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
             quotaHit = true;
             isQuotaExceeded = true;
             console.warn('Cuota de Firestore alcanzada. Pausando subida de recetas...');
             break;
           } else {
-            console.warn(`Error al subir receta ${recipe.id}, se mantiene guardada en local:`, err);
+            console.warn(`Error al subir receta ${recipe.id}:`, errMsg);
           }
         }
       }
@@ -152,16 +162,19 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
     if (!quotaHit && unsynced.proRecipes && unsynced.proRecipes.length > 0) {
       for (const pro of unsynced.proRecipes) {
         try {
-          const cleanPro = { ...pro, synced: true };
+          const cleanPro = cleanForFirestore({ ...pro, synced: true });
           await setDoc(doc(db, 'proRecipes', pro.id), cleanPro, { merge: true });
           await localDB.proRecipes.update(pro.id, { synced: true });
           uploadedCount++;
         } catch (err: any) {
           const errMsg = err?.message || String(err);
+          lastUploadError = errMsg;
           if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
             quotaHit = true;
             isQuotaExceeded = true;
             break;
+          } else {
+            console.warn(`Error al subir proRecipe ${pro.id}:`, errMsg);
           }
         }
       }
@@ -171,16 +184,19 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
     if (!quotaHit && unsynced.products.length > 0) {
       for (const product of unsynced.products) {
         try {
-          const cleanProduct = { ...product, synced: true };
+          const cleanProduct = cleanForFirestore({ ...product, synced: true });
           await setDoc(doc(db, 'products', product.id), cleanProduct, { merge: true });
           await localDB.products.update(product.id, { synced: true });
           uploadedCount++;
         } catch (err: any) {
           const errMsg = err?.message || String(err);
+          lastUploadError = errMsg;
           if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
             quotaHit = true;
             isQuotaExceeded = true;
             break;
+          } else {
+            console.warn(`Error al subir producto ${product.id}:`, errMsg);
           }
         }
       }
@@ -190,16 +206,19 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
     if (!quotaHit && unsynced.menuPlans.length > 0) {
       for (const plan of unsynced.menuPlans) {
         try {
-          const cleanPlan = { ...plan, synced: true };
+          const cleanPlan = cleanForFirestore({ ...plan, synced: true });
           await setDoc(doc(db, 'menuPlans', plan.id), cleanPlan, { merge: true });
           await localDB.menuPlans.update(plan.id, { synced: true });
           uploadedCount++;
         } catch (err: any) {
           const errMsg = err?.message || String(err);
+          lastUploadError = errMsg;
           if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
             quotaHit = true;
             isQuotaExceeded = true;
             break;
+          } else {
+            console.warn(`Error al subir menú ${plan.id}:`, errMsg);
           }
         }
       }
@@ -326,6 +345,8 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
     isQuotaExceeded = false;
     if (uploadedCount > 0 || downloadedCount > 0) {
       notifyListeners(`✓ Sincronización completa (${uploadedCount} subidas, ${downloadedCount} actualizadas desde la nube)`);
+    } else if (unsynced.totalCount > 0 && lastUploadError) {
+      notifyListeners(`⚠️ Pendiente (${unsynced.totalCount} sin subir: ${lastUploadError.slice(0, 80)})`);
     } else {
       notifyListeners(`✓ Todo al día. Nube y disco local completamente sincronizados.`);
     }
