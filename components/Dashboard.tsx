@@ -392,6 +392,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
                   Tus fichas quedan <strong>guardadas en este equipo (IndexedDB)</strong> para que puedas trabajar en casa 100% offline. El respaldo en la nube de Firebase te permite descargar o sincronizar cuando estés conectado en el IES.
                 </p>
+                {syncState?.message && (
+                  <div className="mt-2 text-xs font-semibold text-indigo-700 bg-indigo-50/90 border border-indigo-200/80 px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 shadow-2xs">
+                    <CheckCircle2 size={13} className="text-indigo-600 shrink-0" />
+                    <span>{syncState.message}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -408,13 +414,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   }}
                   disabled={syncState?.isSyncing}
                   className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
-                  title="Sincronizar recetas locales pendientes con la nube de Firebase Firestore"
+                  title="Forzar sincronización completa: sube cambios locales pendientes y descarga recetas nuevas o verificadas de la nube"
                 >
                   <RefreshCw size={14} className={syncState?.isSyncing ? 'animate-spin' : ''} />
-                  <span>{syncState?.isSyncing ? 'Sincronizando...' : 'Subir Pendientes a Nube'}</span>
-                  {offlineRecipesCount > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-mono font-bold">
+                  <span>{syncState?.isSyncing ? 'Sincronizando Todo...' : 'Sincronizar Todo'}</span>
+                  {offlineRecipesCount > 0 ? (
+                    <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-mono font-bold" title="Fichas guardadas en local pendientes de subir">
                       {offlineRecipesCount}
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-emerald-100 text-[10px] font-mono font-bold">
+                      ✓
                     </span>
                   )}
                 </button>

@@ -486,12 +486,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               type="button"
               onClick={onTriggerSync}
               disabled={syncState.isSyncing}
-              className={`w-full p-2 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center justify-between border ${
+              className={`w-full p-2 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center justify-between border cursor-pointer ${
                 syncState.unsyncedCount > 0
                   ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 shadow-2xs'
                   : 'bg-emerald-50/80 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
               }`}
-              title={syncState.unsyncedCount > 0 ? 'Clic para sincronizar cambios pendientes con la nube' : 'Todo sincronizado en local y nube'}
+              title={syncState.unsyncedCount > 0 ? 'Clic para sincronizar todo con la nube' : 'Todo sincronizado. Clic para forzar comprobación y sincronizar con la nube'}
             >
               <div className="flex items-center gap-2 min-w-0">
                 <RefreshCw size={13} className={`${syncState.isSyncing ? 'animate-spin text-amber-600' : syncState.unsyncedCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`} />
@@ -501,12 +501,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                       ? 'Sincronizando...'
                       : syncState.unsyncedCount > 0
                       ? `⚡ ${syncState.unsyncedCount} sin sincronizar`
-                      : '✓ Guardado en Local'}
+                      : '✓ Sincronizado'}
                   </span>
                 )}
               </div>
-              {!isCollapsed && syncState.unsyncedCount > 0 && !syncState.isSyncing && (
-                <span className="px-1.5 py-0.5 bg-amber-600 text-white rounded text-[8px] font-black">
+              {!isCollapsed && !syncState.isSyncing && (
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black ${
+                  syncState.unsyncedCount > 0 ? 'bg-amber-600 text-white' : 'bg-emerald-700 text-white hover:bg-emerald-800'
+                }`}>
                   Sync
                 </span>
               )}

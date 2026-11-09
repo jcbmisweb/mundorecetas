@@ -404,6 +404,40 @@ function App() {
     }
   };
 
+  const handleTriggerFullSync = async () => {
+    try {
+      const res = await executeCloudSync(true);
+      // Actualizar inmediatamente los estados React leyendo del almacenamiento local Dexie
+      const [uRecipes, uProducts, uMenus, uPro] = await Promise.all([
+        localDB.recipes.toArray(),
+        localDB.products.toArray(),
+        localDB.menuPlans.toArray(),
+        localDB.proRecipes.toArray()
+      ]);
+
+      if (uRecipes.length > 0) {
+        const normalized = uRecipes.map(ensureRecipeType);
+        setRecipes(normalized);
+        try { localStorage.setItem('cached_recipes', JSON.stringify(normalized)); } catch {}
+      }
+      if (uProducts.length > 0) {
+        setProductDatabase(uProducts);
+        try { localStorage.setItem('cached_products', JSON.stringify(uProducts)); } catch {}
+      }
+      if (uMenus.length > 0) {
+        setSavedMenus(uMenus);
+        try { localStorage.setItem('cached_menus', JSON.stringify(uMenus)); } catch {}
+      }
+      if (uPro.length > 0) {
+        setProRecipes(uPro);
+        try { localStorage.setItem('cached_pro_recipes', JSON.stringify(uPro)); } catch {}
+      }
+      return res;
+    } catch (err) {
+      console.error('Error al ejecutar sincronización completa:', err);
+    }
+  };
+
   useEffect(() => {
     checkDb();
 
@@ -2047,7 +2081,7 @@ function App() {
             isMobileOpen={isMobileSidebarOpen}
             setIsMobileOpen={setIsMobileSidebarOpen}
             syncState={syncState}
-            onTriggerSync={() => executeCloudSync(true)}
+            onTriggerSync={handleTriggerFullSync}
             onOpenAlphabeticalIndex={() => setIsAlphabeticalIndexOpen(true)}
           />
 
@@ -2208,7 +2242,7 @@ function App() {
                 onDuplicate={handleDuplicateRecipe}
                 onOpenAlphabeticalIndex={() => setIsAlphabeticalIndexOpen(true)}
                 syncState={syncState}
-                onTriggerSync={() => executeCloudSync(true)}
+                onTriggerSync={handleTriggerFullSync}
                 onRefreshAllData={handleRefreshAllData}
               />
             )}
@@ -2330,7 +2364,7 @@ function App() {
             setViewState('EDITOR');
             setIsAlphabeticalIndexOpen(false);
           }}
-          onTriggerSync={() => executeCloudSync(true)}
+          onTriggerSync={handleTriggerFullSync}
           syncState={syncState}
         />
       </ErrorBoundary>

@@ -1,5 +1,5 @@
 import { localDB, getUnsyncedLocalData } from '../db/dexieDB';
-import { Recipe, Product, MenuPlan } from '../types';
+import { Recipe, Product, MenuPlan, ProRecipe } from '../types';
 import { db } from '../firebase';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { ensureRecipeFitsFirestore } from './imageUtils';
@@ -45,13 +45,15 @@ export const getSyncStatistics = async () => {
     const allRecipes = await localDB.recipes.toArray();
     const allProducts = await localDB.products.toArray();
     const allMenus = await localDB.menuPlans.toArray();
+    const allPro = await localDB.proRecipes.toArray();
 
     const unsyncedRecipes = allRecipes.filter(r => r.synced === false);
     const unsyncedProducts = allProducts.filter(p => p.synced === false);
     const unsyncedMenus = allMenus.filter(m => m.synced === false);
+    const unsyncedPro = allPro.filter(p => p.synced === false);
 
     const totalLocal = allRecipes.length;
-    const unsyncedCount = unsyncedRecipes.length + unsyncedProducts.length + unsyncedMenus.length;
+    const unsyncedCount = unsyncedRecipes.length + unsyncedProducts.length + unsyncedMenus.length + unsyncedPro.length;
     const syncedCount = totalLocal - unsyncedRecipes.length;
 
     return {
@@ -90,12 +92,18 @@ const notifyListeners = async (msg?: string) => {
 };
 
 /**
- * Executes a resilient, local-first sync operation uploading unsynced items
- * from Dexie localDB to Firebase Firestore in safe micro-batches.
+ * Executes a resilient, bidirectional synchronization:
+ * 1. Uploads unsynced local recipes, products, and menus to Firebase Firestore.
+ * 2. Downloads and merges new or updated recipes (including verification checks), products, and menus from Firestore into local Dexie DB.
  * It guards against QuotaExceeded errors and never loses or removes local data.
  */
-export const executeCloudSync = async (forceParam: any = false): Promise<{ success: boolean; syncedCount: number; quotaPaused?: boolean }> => {
-  if (isSyncing) return { success: false, syncedCount: 0 };
+export const executeCloudSync = async (forceParam: any = false): Promise<{
+  success: boolean;
+  syncedCount: number;
+  downloadedCount: number;
+  quotaPaused?: boolean;
+}> => {
+  if (isSyncing) return { success: false, syncedCount: 0, downloadedCount: 0 };
 
   const isForced = Boolean(forceParam);
   if (isForced) {
@@ -105,31 +113,27 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{ succe
   // Guard against running sync if Firestore quota limit was previously reached unless explicitly forced by user
   if (isQuotaExceeded && !isForced) {
     notifyListeners('⚡ Cuota diaria de Firestore alcanzada. Las fichas están 100% seguras en Local.');
-    return { success: true, syncedCount: 0, quotaPaused: true };
-  }
-
-  const unsynced = await getUnsyncedLocalData();
-  if (unsynced.totalCount === 0) {
-    isQuotaExceeded = false;
-    notifyListeners('✓ Todo actualizado en Local y Nube');
-    return { success: true, syncedCount: 0 };
+    return { success: true, syncedCount: 0, downloadedCount: 0, quotaPaused: true };
   }
 
   isSyncing = true;
-  notifyListeners('Comprobando recetas existentes y sincronizando con la nube...');
+  notifyListeners('Sincronizando recetas y catálogo con la nube (subida y descarga)...');
 
-  let count = 0;
+  let uploadedCount = 0;
+  let downloadedCount = 0;
   let quotaHit = false;
 
   try {
-    // 1. Sincronizar recetas pendientes una a una con optimización de payload
+    const unsynced = await getUnsyncedLocalData();
+
+    // 1. Subir recetas locales pendientes una a una con compresión si aplica
     if (!quotaHit && unsynced.recipes.length > 0) {
       for (const recipe of unsynced.recipes) {
         try {
           const fitted = await ensureRecipeFitsFirestore({ ...recipe, synced: true });
           await setDoc(doc(db, 'recipes', recipe.id), fitted, { merge: true });
           await localDB.recipes.update(recipe.id, { ...fitted, synced: true });
-          count++;
+          uploadedCount++;
         } catch (err: any) {
           const errMsg = err?.message || String(err);
           if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
@@ -139,20 +143,38 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{ succe
             break;
           } else {
             console.warn(`Error al subir receta ${recipe.id}, se mantiene guardada en local:`, err);
-            // NUNCA marcar como sincronizado si falló la subida; permanece seguro en disco local
           }
         }
       }
     }
 
-    // 3. Sincronizar materias primas si no se ha agotado la cuota
+    // 2. Subir recetas de Taller I+D pendientes
+    if (!quotaHit && unsynced.proRecipes && unsynced.proRecipes.length > 0) {
+      for (const pro of unsynced.proRecipes) {
+        try {
+          const cleanPro = { ...pro, synced: true };
+          await setDoc(doc(db, 'proRecipes', pro.id), cleanPro, { merge: true });
+          await localDB.proRecipes.update(pro.id, { synced: true });
+          uploadedCount++;
+        } catch (err: any) {
+          const errMsg = err?.message || String(err);
+          if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
+            quotaHit = true;
+            isQuotaExceeded = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // 3. Subir materias primas / productos pendientes
     if (!quotaHit && unsynced.products.length > 0) {
       for (const product of unsynced.products) {
         try {
           const cleanProduct = { ...product, synced: true };
           await setDoc(doc(db, 'products', product.id), cleanProduct, { merge: true });
           await localDB.products.update(product.id, { synced: true });
-          count++;
+          uploadedCount++;
         } catch (err: any) {
           const errMsg = err?.message || String(err);
           if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
@@ -164,14 +186,14 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{ succe
       }
     }
 
-    // 4. Sincronizar menús si no se ha agotado la cuota
+    // 4. Subir planes de menú pendientes
     if (!quotaHit && unsynced.menuPlans.length > 0) {
       for (const plan of unsynced.menuPlans) {
         try {
           const cleanPlan = { ...plan, synced: true };
           await setDoc(doc(db, 'menuPlans', plan.id), cleanPlan, { merge: true });
           await localDB.menuPlans.update(plan.id, { synced: true });
-          count++;
+          uploadedCount++;
         } catch (err: any) {
           const errMsg = err?.message || String(err);
           if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
@@ -183,22 +205,137 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{ succe
       }
     }
 
+    // 5. Descarga y sincronización desde la nube hacia el almacenamiento local (Firestore -> Dexie)
+    if (!quotaHit) {
+      try {
+        // A. Descargar y fusionar recetas
+        const snap = await getDocs(collection(db, 'recipes'));
+        const remoteDocs = snap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Recipe));
+        const localRecipes = await localDB.recipes.toArray();
+        const localMap = new Map<string, Recipe>(localRecipes.map(r => [r.id, r]));
+
+        const recipesToUpdate: Recipe[] = [];
+        for (const remoteR of remoteDocs) {
+          if (!remoteR.id) continue;
+          const localR = localMap.get(remoteR.id);
+          if (!localR) {
+            // Receta remota que falta completamente en este equipo
+            recipesToUpdate.push({ ...remoteR, synced: true });
+            downloadedCount++;
+          } else if (localR.synced !== false) {
+            // Ya sincronizado localmente: si la remota tiene cambios (ej: verificación, modificación más reciente...)
+            const remoteVerified = Boolean(remoteR.isVerified);
+            const localVerified = Boolean(localR.isVerified);
+            const remoteMod = remoteR.lastModified || 0;
+            const localMod = localR.lastModified || 0;
+
+            if (remoteVerified !== localVerified || remoteMod > localMod || remoteR.name !== localR.name) {
+              recipesToUpdate.push({ ...localR, ...remoteR, synced: true });
+              downloadedCount++;
+            }
+          }
+        }
+
+        if (recipesToUpdate.length > 0) {
+          await localDB.recipes.bulkPut(recipesToUpdate);
+        }
+
+        // B. Descargar productos remotos que falten o estén actualizados
+        try {
+          const prodSnap = await getDocs(collection(db, 'products'));
+          const remoteProds = prodSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Product));
+          const localProds = await localDB.products.toArray();
+          const localProdMap = new Map(localProds.map(p => [p.id, p]));
+          const prodsToPut: Product[] = [];
+          for (const rp of remoteProds) {
+            if (!rp.id) continue;
+            const lp = localProdMap.get(rp.id);
+            if (!lp || (lp.synced !== false && (rp.lastModified || 0) > (lp.lastModified || 0))) {
+              prodsToPut.push({ ...rp, synced: true });
+            }
+          }
+          if (prodsToPut.length > 0) {
+            await localDB.products.bulkPut(prodsToPut);
+          }
+        } catch (prodErr) {
+          console.warn('[Sync] Advertencia al descargar productos de Firestore:', prodErr);
+        }
+
+        // C. Descargar planes de menú remotos que falten
+        try {
+          const menuSnap = await getDocs(collection(db, 'menuPlans'));
+          const remoteMenus = menuSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+          const localMenus = await localDB.menuPlans.toArray();
+          const localMenuMap = new Map(localMenus.map(m => [m.id, m]));
+          const menusToPut: MenuPlan[] = [];
+          for (const rm of remoteMenus) {
+            if (!rm.id) continue;
+            const lm = localMenuMap.get(rm.id);
+            if (!lm || lm.synced !== false) {
+              menusToPut.push({ ...rm, synced: true });
+            }
+          }
+          if (menusToPut.length > 0) {
+            await localDB.menuPlans.bulkPut(menusToPut);
+          }
+        } catch (menuErr) {
+          console.warn('[Sync] Advertencia al descargar menús de Firestore:', menuErr);
+        }
+
+        // D. Descargar proRecipes remotas que falten
+        try {
+          const proSnap = await getDocs(collection(db, 'proRecipes'));
+          const remotePros = proSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as ProRecipe));
+          const localPros = await localDB.proRecipes.toArray();
+          const localProMap = new Map(localPros.map(p => [p.id, p]));
+          const prosToPut: ProRecipe[] = [];
+          for (const rpro of remotePros) {
+            if (!rpro.id) continue;
+            const lpro = localProMap.get(rpro.id);
+            if (!lpro || lpro.synced !== false) {
+              prosToPut.push({ ...rpro, synced: true });
+            }
+          }
+          if (prosToPut.length > 0) {
+            await localDB.proRecipes.bulkPut(prosToPut);
+          }
+        } catch (proErr) {
+          console.warn('[Sync] Advertencia al descargar proRecipes de Firestore:', proErr);
+        }
+
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
+          quotaHit = true;
+          isQuotaExceeded = true;
+        } else {
+          console.warn('[Sync] Error al descargar de Firestore:', err);
+        }
+      }
+    }
+
+    markDailySyncCompleted();
     lastSyncTime = Date.now();
     isSyncing = false;
 
     if (quotaHit) {
       notifyListeners(`⚡ Cuota diaria de Firestore alcanzada. Las fichas están 100% seguras en Local.`);
-      return { success: true, syncedCount: count, quotaPaused: true };
+      return { success: true, syncedCount: uploadedCount, downloadedCount, quotaPaused: true };
     }
 
     isQuotaExceeded = false;
-    notifyListeners(`✓ Sincronización completada (${count} elementos actualizados)`);
-    return { success: true, syncedCount: count };
+    if (uploadedCount > 0 || downloadedCount > 0) {
+      notifyListeners(`✓ Sincronización completa (${uploadedCount} subidas, ${downloadedCount} actualizadas desde la nube)`);
+    } else {
+      notifyListeners(`✓ Todo al día. Nube y disco local completamente sincronizados.`);
+    }
+
+    return { success: true, syncedCount: uploadedCount, downloadedCount };
   } catch (err: any) {
     console.error('Error en la sincronización:', err);
     isSyncing = false;
-    notifyListeners('Sincronización diferida. Datos guardados en Local.');
-    return { success: false, syncedCount: count };
+    notifyListeners('Sincronización finalizada con datos locales protegidos.');
+    return { success: false, syncedCount: uploadedCount, downloadedCount };
   }
 };
 
