@@ -202,12 +202,15 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
       }
     }
 
-    // 4. Subir planes de menú pendientes
+    // 4. Subir planes de menú pendientes (a menuPlans y menu_plans)
     if (!quotaHit && unsynced.menuPlans.length > 0) {
       for (const plan of unsynced.menuPlans) {
         try {
           const cleanPlan = cleanForFirestore({ ...plan, synced: true });
-          await setDoc(doc(db, 'menuPlans', plan.id), cleanPlan, { merge: true });
+          await Promise.allSettled([
+            setDoc(doc(db, 'menuPlans', plan.id), cleanPlan, { merge: true }),
+            setDoc(doc(db, 'menu_plans', plan.id), cleanPlan, { merge: true })
+          ]);
           await localDB.menuPlans.update(plan.id, { synced: true });
           uploadedCount++;
         } catch (err: any) {
@@ -280,17 +283,30 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
           console.warn('[Sync] Advertencia al descargar productos de Firestore:', prodErr);
         }
 
-        // C. Descargar planes de menú remotos que falten
+        // C. Descargar planes de menú remotos que falten (comprobando menuPlans y menu_plans)
         try {
-          const menuSnap = await getDocs(collection(db, 'menuPlans'));
-          const remoteMenus = menuSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+          let remoteMenus: MenuPlan[] = [];
+          try {
+            const menuSnap = await getDocs(collection(db, 'menuPlans'));
+            remoteMenus = menuSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+          } catch (e1) {
+            console.warn('[Sync] Advertencia menuPlans:', e1);
+          }
+          if (remoteMenus.length === 0) {
+            try {
+              const altSnap = await getDocs(collection(db, 'menu_plans'));
+              remoteMenus = altSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+            } catch (e2) {
+              console.warn('[Sync] Advertencia menu_plans:', e2);
+            }
+          }
           const localMenus = await localDB.menuPlans.toArray();
           const localMenuMap = new Map(localMenus.map(m => [m.id, m]));
           const menusToPut: MenuPlan[] = [];
           for (const rm of remoteMenus) {
             if (!rm.id) continue;
             const lm = localMenuMap.get(rm.id);
-            if (!lm || lm.synced !== false) {
+            if (!lm || lm.synced !== false || (rm.lastModified || 0) > (lm.lastModified || 0)) {
               menusToPut.push({ ...rm, synced: true });
             }
           }
@@ -338,7 +354,11 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
     isSyncing = false;
 
     if (quotaHit) {
-      notifyListeners(`⚡ Cuota diaria de Firestore alcanzada. Las fichas están 100% seguras en Local.`);
+      if (uploadedCount > 0) {
+        notifyListeners(`✓ Se han subido ${uploadedCount} elementos a la nube. La descarga de novedades se completará cuando se reinicie la cuota diaria.`);
+      } else {
+        notifyListeners(`⚡ Cuota diaria de lectura de Firestore alcanzada hoy (50.000 lecturas). Tus fichas están 100% seguras en Local.`);
+      }
       return { success: true, syncedCount: uploadedCount, downloadedCount, quotaPaused: true };
     }
 

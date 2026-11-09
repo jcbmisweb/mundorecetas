@@ -69,7 +69,8 @@ import {
   setIsQuotaExceeded,
   executeDailyVerification,
   isDailySyncNeeded,
-  getDailySyncStatus
+  getDailySyncStatus,
+  cleanForFirestore
 } from './lib/syncManager';
 import { initGoogleDriveAuth } from './lib/googleDriveService';
 import { parseRecipesFromCSV, parseProductsFromCSV } from './lib/csvParser';
@@ -1917,26 +1918,48 @@ function App() {
 
   const handleSaveMenu = async (menu: MenuPlan) => {
     try {
-      const currentUid = user?.id || appUser?.uid;
-      if (!currentUid) return;
+      const currentUid = user?.id || appUser?.uid || 'user_admin';
       const userWorkspace = appUser?.workspaceId || currentUid;
-      const menuToSave = {
+      const menuToSave: MenuPlan = {
         ...menu,
-        workspaceId: menu.workspaceId || userWorkspace
+        workspaceId: menu.workspaceId || userWorkspace,
+        lastModified: menu.lastModified || Date.now()
       };
-      await setDoc(doc(db, 'menu_plans', menuToSave.id), menuToSave, { merge: true });
-      await saveMenuPlanLocal(menuToSave, true);
+      // 1. Guardar primero en almacenamiento local de alta velocidad (Dexie)
+      await saveMenuPlanLocal(menuToSave, false);
       setSavedMenus(prev => [menuToSave, ...prev.filter(m => m.id !== menuToSave.id)]);
+      try {
+        localStorage.setItem('cached_menus', JSON.stringify([menuToSave, ...savedMenus.filter(m => m.id !== menuToSave.id)]));
+      } catch {}
+
+      // 2. Subir a Firestore (tanto en menuPlans como en menu_plans para compatibilidad total)
+      const cleanMenu = cleanForFirestore(menuToSave);
+      try {
+        await Promise.allSettled([
+          setDoc(doc(db, 'menuPlans', menuToSave.id), cleanMenu, { merge: true }),
+          setDoc(doc(db, 'menu_plans', menuToSave.id), cleanMenu, { merge: true })
+        ]);
+        await saveMenuPlanLocal(menuToSave, true);
+        setSavedMenus(prev => prev.map(m => m.id === menuToSave.id ? { ...m, synced: true } : m));
+      } catch (cloudErr) {
+        console.warn('Menú guardado en local; subida a la nube pendiente:', cloudErr);
+      }
     } catch (err) {
-      console.error("Error saving menu to Firestore:", err);
+      console.error("Error saving menu:", err);
     }
   };
 
   const handleDeleteMenu = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'menu_plans', id));
+      await Promise.allSettled([
+        deleteDoc(doc(db, 'menuPlans', id)),
+        deleteDoc(doc(db, 'menu_plans', id))
+      ]);
       await localDB.menuPlans.delete(id);
       setSavedMenus(prev => prev.filter(m => m.id !== id));
+      try {
+        localStorage.setItem('cached_menus', JSON.stringify(savedMenus.filter(m => m.id !== id)));
+      } catch {}
     } catch (err) {
       console.error("Error deleting menu:", err);
     }
