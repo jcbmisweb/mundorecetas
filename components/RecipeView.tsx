@@ -162,11 +162,21 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
 
   useEffect(() => {
     const originalTitle = document.title;
-    document.title = recipe.name || "Receta";
+    const cleanName = (recipe?.name || "FICHA TÉCNICA").replace(/[/\\?%*:|"<>]/g, '-').trim();
+    document.title = cleanName;
+
+    const handleBeforePrint = () => {
+      const freshName = (recipe?.name || "FICHA TÉCNICA").replace(/[/\\?%*:|"<>]/g, '-').trim();
+      document.title = freshName;
+    };
+
+    window.addEventListener('beforeprint', handleBeforePrint);
+
     return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
       document.title = originalTitle;
     };
-  }, [recipe.name]);
+  }, [recipe?.name]);
 
   const paxRatio = useMemo(() => {
     return recipe.yieldQuantity && recipe.yieldQuantity > 0
@@ -325,11 +335,13 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
     return list;
   }, [recipe, paxRatio, productDatabase]);
 
-  const handlePrint = () => {
-    if (recipe?.name) {
-      document.title = recipe.name;
-    }
-    window.print();
+  const handlePrint = (customSuffix: string | React.MouseEvent = '') => {
+    const cleanName = (recipe?.name || "FICHA TÉCNICA").replace(/[/\\?%*:|"<>]/g, '-').trim();
+    const suffixStr = typeof customSuffix === 'string' && customSuffix.trim().length > 0 ? customSuffix.trim() : '';
+    document.title = suffixStr ? `${cleanName} - ${suffixStr}` : cleanName;
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
 
   return (
@@ -599,7 +611,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
               </div>
             </div>
             <button
-              onClick={() => window.print()}
+              onClick={() => handlePrint('Encarte Take Away')}
               className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all flex items-center gap-2 shadow-sm"
             >
               <Printer size={15} /> Imprimir Encarte (1 Hoja)
@@ -1937,7 +1949,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                     </div>
                   </div>
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => handlePrint('Infografía Didáctica')}
                     className="px-3 py-1.5 bg-white text-slate-950 rounded-xl text-xs font-black uppercase hover:bg-slate-100 transition-all flex items-center gap-1.5 no-print shadow-xs"
                   >
                     <Printer size={14} /> Imprimir Hoja

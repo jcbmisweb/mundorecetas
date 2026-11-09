@@ -244,14 +244,20 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
             // Receta remota que falta completamente en este equipo
             recipesToUpdate.push({ ...remoteR, synced: true });
             downloadedCount++;
-          } else if (localR.synced !== false) {
-            // Ya sincronizado localmente: si la remota tiene cambios (ej: verificación, modificación más reciente...)
+          } else {
             const remoteVerified = Boolean(remoteR.isVerified);
             const localVerified = Boolean(localR.isVerified);
             const remoteMod = remoteR.lastModified || 0;
             const localMod = localR.lastModified || 0;
 
-            if (remoteVerified !== localVerified || remoteMod > localMod || remoteR.name !== localR.name) {
+            // Trazabilidad por marcas y fechas:
+            // 1. Si la versión en la nube es más reciente que la local (remoteMod > localMod)
+            // 2. Si la versión en la nube está verificada (isVerified: true) y la local no
+            // 3. O si la local no tiene cambios pendientes de subir (synced !== false) y difieren en nombre o verificación
+            if (remoteMod > localMod || (remoteVerified && !localVerified)) {
+              recipesToUpdate.push({ ...localR, ...remoteR, synced: true });
+              downloadedCount++;
+            } else if (localR.synced !== false && (remoteVerified !== localVerified || remoteR.name !== localR.name)) {
               recipesToUpdate.push({ ...localR, ...remoteR, synced: true });
               downloadedCount++;
             }
@@ -495,11 +501,21 @@ export const executeDailyVerification = async (force: boolean = false): Promise<
       }
     }
 
-    // 3. Descargar recetas de la nube que falten por completo en local
+    // 3. Descargar recetas de la nube que falten o que tengan fecha más reciente en Firestore
     const toDownload: Recipe[] = [];
     for (const remoteR of remoteDocs) {
-      if (!localMap.has(remoteR.id)) {
+      if (!remoteR.id) continue;
+      const localR = localMap.get(remoteR.id);
+      if (!localR) {
         toDownload.push({ ...remoteR, synced: true });
+      } else {
+        const remoteVerified = Boolean(remoteR.isVerified);
+        const localVerified = Boolean(localR.isVerified);
+        const remoteMod = remoteR.lastModified || 0;
+        const localMod = localR.lastModified || 0;
+        if (remoteMod > localMod || (remoteVerified && !localVerified)) {
+          toDownload.push({ ...localR, ...remoteR, synced: true });
+        }
       }
     }
 
@@ -530,6 +546,104 @@ export const executeDailyVerification = async (force: boolean = false): Promise<
       uploadedCount,
       downloadedCount,
       message: 'Comprobación finalizada con datos locales protegidos.'
+    };
+  }
+};
+
+/**
+ * Forzar descarga y reemplazo total desde Firebase Firestore (Calco exacto de la nube).
+ * Descarga todas las recetas, productos, menús y recetas pro directamente a Dexie (localDB),
+ * resolviendo cualquier discrepancia entre ordenadores (casa, portátil, IES, tablet).
+ */
+export const forcePullFromCloud = async (): Promise<{
+  success: boolean;
+  recipesCount: number;
+  productsCount: number;
+  menusCount: number;
+  proRecipesCount: number;
+  message: string;
+}> => {
+  isSyncing = true;
+  notifyListeners('Forzando descarga completa y calco exacto desde Firebase...');
+
+  try {
+    // 1. Recetas
+    const recipeSnap = await getDocs(collection(db, 'recipes'));
+    const remoteRecipes = recipeSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Recipe));
+    if (remoteRecipes.length > 0) {
+      await localDB.recipes.bulkPut(remoteRecipes);
+    }
+
+    // 2. Materias primas / productos
+    let remoteProds: Product[] = [];
+    try {
+      const prodSnap = await getDocs(collection(db, 'products'));
+      remoteProds = prodSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Product));
+      if (remoteProds.length > 0) {
+        await localDB.products.bulkPut(remoteProds);
+      }
+    } catch (e) {
+      console.warn('[forcePull] Error descargando productos:', e);
+    }
+
+    // 3. Menús
+    let remoteMenus: MenuPlan[] = [];
+    try {
+      let menuSnap = await getDocs(collection(db, 'menuPlans'));
+      remoteMenus = menuSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+      if (remoteMenus.length === 0) {
+        const altSnap = await getDocs(collection(db, 'menu_plans'));
+        remoteMenus = altSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+      }
+      if (remoteMenus.length > 0) {
+        await localDB.menuPlans.bulkPut(remoteMenus);
+      }
+    } catch (e) {
+      console.warn('[forcePull] Error descargando menús:', e);
+    }
+
+    // 4. ProRecipes
+    let remotePros: ProRecipe[] = [];
+    try {
+      const proSnap = await getDocs(collection(db, 'proRecipes'));
+      remotePros = proSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as ProRecipe));
+      if (remotePros.length > 0) {
+        await localDB.proRecipes.bulkPut(remotePros);
+      }
+    } catch (e) {
+      console.warn('[forcePull] Error descargando proRecipes:', e);
+    }
+
+    isSyncing = false;
+    isQuotaExceeded = false;
+    lastSyncTime = Date.now();
+    const msg = `✓ Calco completado: ${remoteRecipes.length} recetas, ${remoteMenus.length} menús y ${remoteProds.length} productos sincronizados desde la nube.`;
+    notifyListeners(msg);
+
+    return {
+      success: true,
+      recipesCount: remoteRecipes.length,
+      productsCount: remoteProds.length,
+      menusCount: remoteMenus.length,
+      proRecipesCount: remotePros.length,
+      message: msg
+    };
+  } catch (err: any) {
+    isSyncing = false;
+    const errMsg = err?.message || String(err);
+    if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
+      isQuotaExceeded = true;
+      notifyListeners('⚡ Cuota diaria de lectura de Firestore alcanzada. Se reanudará al resetear el límite.');
+    } else {
+      notifyListeners(`Error en descarga: ${errMsg.slice(0, 60)}`);
+    }
+    return {
+      success: false,
+      recipesCount: 0,
+      productsCount: 0,
+      menusCount: 0,
+      proRecipesCount: 0,
+      message: errMsg
     };
   }
 };

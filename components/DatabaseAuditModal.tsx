@@ -13,6 +13,7 @@ import {
   ensureRecipeFitsFirestore 
 } from '../lib/imageUtils';
 import { executeDatabaseSeparation, isRecipeRawProduct } from '../lib/recipeProductSeparator';
+import { forcePullFromCloud } from '../lib/syncManager';
 
 interface DatabaseAuditModalProps {
   isOpen: boolean;
@@ -43,8 +44,10 @@ export const DatabaseAuditModal: React.FC<DatabaseAuditModalProps> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isSeparating, setIsSeparating] = useState(false);
+  const [isForcePulling, setIsForcePulling] = useState(false);
   const [separationSuccessMessage, setSeparationSuccessMessage] = useState<string | null>(null);
   const [restoreSuccessCount, setRestoreSuccessCount] = useState<number | null>(null);
+  const [forcePullMessage, setForcePullMessage] = useState<string | null>(null);
 
   // Local storage scanned items
   const [localHistoryRecipes, setLocalHistoryRecipes] = useState<Recipe[]>([]);
@@ -55,6 +58,25 @@ export const DatabaseAuditModal: React.FC<DatabaseAuditModalProps> = ({
   // DB diagnostic state
   const [pingLatency, setPingLatency] = useState<number | null>(null);
   const [pingStatus, setPingStatus] = useState<'checking' | 'ok' | 'error'>('checking');
+
+  const handleForcePull = async () => {
+    setIsForcePulling(true);
+    setForcePullMessage(null);
+    try {
+      const res = await forcePullFromCloud();
+      if (res.success) {
+        setForcePullMessage(res.message);
+        if (onRefreshData) await onRefreshData();
+        await runFullScan();
+      } else {
+        setForcePullMessage(`⚠️ ${res.message || 'No se pudo completar la descarga completa'}`);
+      }
+    } catch (err: any) {
+      setForcePullMessage(`Error: ${err?.message || err}`);
+    } finally {
+      setIsForcePulling(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -346,6 +368,52 @@ export const DatabaseAuditModal: React.FC<DatabaseAuditModalProps> = ({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Forzar Calco Exacto desde la Nube (Firebase -> Este Dispositivo) */}
+              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-indigo-700/40 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw size={18} className="text-cyan-400" />
+                      <h4 className="text-sm font-black tracking-tight uppercase">
+                        Forzar Descarga y Calco Exacto de la Nube
+                      </h4>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                        Multi-dispositivo (Casa / IES / Tablet)
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-200 leading-relaxed max-w-xl">
+                      Si has modificado recetas o menús en el IES, la tablet o el portátil y en este equipo todavía no aparecen actualizadas, pulsa este botón para descargar el calco completo e idéntico desde Firebase Firestore.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isForcePulling}
+                    onClick={handleForcePull}
+                    className="px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    {isForcePulling ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin text-slate-950" />
+                        <span>Descargando de la Nube...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={14} />
+                        <span>Forzar Calco de la Nube</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {forcePullMessage && (
+                  <div className="p-3 bg-white/10 rounded-xl text-xs font-bold text-cyan-200 border border-cyan-400/30 flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-cyan-400 shrink-0" />
+                    <span>{forcePullMessage}</span>
+                  </div>
+                )}
               </div>
 
               {/* Desglose de Categorías y Filtros (Take Away vs Normales) */}
