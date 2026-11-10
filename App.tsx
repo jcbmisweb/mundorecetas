@@ -642,18 +642,26 @@ function App() {
 
     // 2. Listen to Firebase Auth state
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      const safetyTimer = setTimeout(() => {
+        setIsLoading(false);
+      }, 2500);
+
       if (fbUser) {
         const isAdminEmail = isUserAdmin({ email: fbUser.email || '' });
         const userDocRef = doc(db, 'users', fbUser.uid);
         try {
-          const userDocSnap = await getDoc(userDocRef);
+          const getDocWithTimeout = Promise.race([
+            getDoc(userDocRef),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+          ]);
+          const userDocSnap: any = await getDocWithTimeout;
           if (userDocSnap.exists()) {
             const data = userDocSnap.data() as AppUser;
             let currentProfile: AppUser = { ...data, uid: fbUser.uid };
             if (isAdminEmail && (!currentProfile.isApproved || currentProfile.role !== 'admin')) {
               currentProfile.isApproved = true;
               currentProfile.role = 'admin';
-              await setDoc(userDocRef, currentProfile, { merge: true });
+              setDoc(userDocRef, currentProfile, { merge: true }).catch(() => {});
             }
             saveActiveUser(currentProfile);
             setAppUser(currentProfile);
@@ -673,14 +681,14 @@ function App() {
               createdAt: Date.now(),
               workspaceId: fbUser.uid
             };
-            await setDoc(userDocRef, newUser);
+            setDoc(userDocRef, newUser).catch(() => {});
             saveActiveUser(newUser);
             setAppUser(newUser);
             setUser({ id: newUser.uid, email: newUser.email, displayName: newUser.displayName });
             setViewState(newUser.isApproved ? 'DASHBOARD' : 'PENDING');
           }
         } catch (e) {
-          console.warn("Error fetching user profile from Firestore:", e);
+          console.warn("Error fetching user profile from Firestore (using fallback):", e);
           const fallbackUser: AppUser = {
             uid: fbUser.uid,
             email: fbUser.email || '',
@@ -696,9 +704,11 @@ function App() {
           setUser({ id: fallbackUser.uid, email: fallbackUser.email, displayName: fallbackUser.displayName });
           setViewState('DASHBOARD');
         } finally {
+          clearTimeout(safetyTimer);
           setIsLoading(false);
         }
       } else {
+        clearTimeout(safetyTimer);
         const active = getActiveUser();
         if (active) {
           setUser({ id: active.uid, email: active.email, displayName: active.displayName });
