@@ -744,7 +744,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
             const costPerPortion = recipe.totalCost && recipe.yieldQuantity ? (recipe.totalCost / recipe.yieldQuantity).toFixed(2).replace('.', ',') : '0,00';
             
             const allAllergens = new Set<string>();
-            recipe.subRecipes.forEach(sub => sub.ingredients.forEach(ing => ing.allergens.forEach(a => allAllergens.add(a))));
+            recipe.subRecipes?.forEach(sub => {
+              sub.ingredients?.forEach(ing => {
+                ing.allergens?.forEach(a => {
+                  if (a) allAllergens.add(a);
+                });
+              });
+            });
 
             const isMine = appUser?.workspaceId && (recipe.workspaceId === appUser.workspaceId || (isActuallyAdmin && !recipe.workspaceId));
             const isCommunity = !isMine;

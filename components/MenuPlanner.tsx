@@ -285,13 +285,13 @@ export const MenuPlanner: React.FC<MenuPlannerProps> = ({
     selectedRecipes.forEach(recipe => {
       const ratio = menuPax / (recipe.yieldQuantity || 1);
 
-      recipe.subRecipes.forEach((sub, sIdx) => {
-        sub.ingredients.forEach((ing, iIdx) => {
+      recipe.subRecipes?.forEach((sub, sIdx) => {
+        sub.ingredients?.forEach((ing, iIdx) => {
           const ingKey = `${sIdx}_${iIdx}`;
           const override = dishIngredientOverrides[recipe.id]?.[ingKey];
-          const qtyNum = override ? parseFloat(override.quantity.replace(',', '.')) : parseFloat(ing.quantity.replace(',', '.'));
+          const qtyNum = override ? parseFloat(override.quantity.replace(',', '.')) : parseFloat((ing?.quantity || '0').replace(',', '.'));
           const finalQty = override ? (isNaN(qtyNum) ? 0 : qtyNum) : (isNaN(qtyNum) ? 0 : qtyNum * ratio);
-          const ingCost = calculateIngredientCost(finalQty, override ? override.unit : ing.unit, ing.pricePerUnit, ing.baseUnit, ing.weightPerUnit);
+          const ingCost = calculateIngredientCost(finalQty, override ? override.unit : ing?.unit, ing?.pricePerUnit, ing?.baseUnit, ing?.weightPerUnit);
           totalCost += ingCost;
         });
       });
@@ -320,8 +320,9 @@ export const MenuPlanner: React.FC<MenuPlannerProps> = ({
       const role = recipeRoles[recipe.id] || recipe.name;
 
       // 1. Base recipe ingredients (with possible teacher manual override or substitution for this service)
-      recipe.subRecipes.forEach((sub, sIdx) => {
-        sub.ingredients.forEach((ing, iIdx) => {
+      recipe.subRecipes?.forEach((sub, sIdx) => {
+        sub.ingredients?.forEach((ing, iIdx) => {
+          if (!ing) return;
           const ingKey = `${sIdx}_${iIdx}`;
           const override = dishIngredientOverrides[recipe.id]?.[ingKey];
           const effectiveName = (override?.replacedName && override.replacedName.trim()) ? override.replacedName.trim() : ing.name;
@@ -690,8 +691,14 @@ export const MenuPlanner: React.FC<MenuPlannerProps> = ({
 
   const getRecipeAllergens = (r: Recipe): Allergen[] => {
     const set = new Set<Allergen>();
-    r.subRecipes.forEach(sub => sub.ingredients.forEach(ing => ing.allergens.forEach(a => set.add(a))));
-    r.extraAllergens?.forEach(a => set.add(a));
+    r.subRecipes?.forEach(sub => {
+      sub.ingredients?.forEach(ing => {
+        ing.allergens?.forEach(a => {
+          if (a) set.add(a);
+        });
+      });
+    });
+    r.extraAllergens?.forEach(a => { if (a) set.add(a); });
     return Array.from(set);
   };
 
