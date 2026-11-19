@@ -1,5 +1,6 @@
 {
   "name": "Remix Remix Recetariojcb firestone",
   "description": "Gestor de fichas técnicas para IES La Flota - Juan Codina Barranco",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

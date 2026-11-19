@@ -1,12 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe } from "../types";
-
-const getAiClient = () => {
-  const apiKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || 
-                 ((import.meta as any).env?.VITE_GEMINI_API_KEY) || 
-                 "";
-  return new GoogleGenAI({ apiKey });
-};
 
 export interface Pairing {
   name: string;
@@ -225,83 +217,28 @@ export const analyzeRecipeInternalHarmony = async (recipe: Recipe): Promise<Reci
   }
 
   try {
-    const ai = getAiClient();
-    const prompt = `Analiza la armonía y química molecular interna de esta receta gastronómica profesional:
-Nombre de la receta: "${recipe.name}"
-Categorías: ${(recipe.categories || [recipe.category]).join(', ')}
-Ingredientes del escandallo: ${uniqueIngs.join(', ')}.
-
-TU OBJETIVO ES EXPLICAR CIENTÍFICAMENTE POR QUÉ FUNCIONA ESTE PLATO:
-1. Puntuación de Cohesión Molecular (0-100%).
-2. Perfil Aromático Dominante (ej: "Mediterráneo Herbal-Sulfuroso", "Umami Marino con Destellos Cítricos").
-3. Familias aromáticas volátiles presentes (array de 3 a 5 familias, ej: Terpenos, Pirazinas, Sulfuros).
-4. Ingrediente Puente (cuál de los ingredientes de la receta actúa como aglutinador sensorial y por qué).
-5. Enlaces moleculares directos entre los ingredientes reales del plato (mínimo 3 y máximo 6 enlaces clave con: source, target, sharedCompound, affinityScore de 0 a 100, y culinaryReason).
-6. Resumen organoléptico formativo para el cocinero/alumno explicando por qué casan en paladar.
-7. Sugerencia de potenciador molecular opcional (un ingrediente sutil que elevaría aún más el plato compartiendo moléculas clave).
-
-RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: "Eres un consultor de I+D gastronómico molecular especializado en Foodpairing y bases de datos FlavorDB. Ofrece análisis científicos rigurosos pero redactados en lenguaje culinario práctico y formativo. Responde siempre en JSON estructurado.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            cohesionScore: { type: Type.NUMBER },
-            dominantProfile: { type: Type.STRING },
-            volatileFamilies: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            },
-            bridgeIngredient: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                role: { type: Type.STRING }
-              },
-              required: ["name", "role"]
-            },
-            molecularLinks: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  source: { type: Type.STRING },
-                  target: { type: Type.STRING },
-                  sharedCompound: { type: Type.STRING },
-                  affinityScore: { type: Type.NUMBER },
-                  culinaryReason: { type: Type.STRING }
-                },
-                required: ["source", "target", "sharedCompound", "affinityScore", "culinaryReason"]
-              }
-            },
-            organolepticSummary: { type: Type.STRING },
-            enhancerSuggestion: {
-              type: Type.OBJECT,
-              properties: {
-                ingredient: { type: Type.STRING },
-                compound: { type: Type.STRING },
-                technique: { type: Type.STRING }
-              },
-              required: ["ingredient", "compound", "technique"]
-            }
-          },
-          required: ["cohesionScore", "dominantProfile", "volatileFamilies", "bridgeIngredient", "molecularLinks", "organolepticSummary", "enhancerSuggestion"]
-        }
-      }
+    const resp = await fetch("/api/gemini/recipe-harmony", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipeName: recipe.name,
+        categories: recipe.categories || (recipe.category ? [recipe.category] : []),
+        ingredients: uniqueIngs
+      })
     });
 
-    const parsed = JSON.parse(response.text || "{}");
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody?.error || `HTTP ${resp.status}`);
+    }
+
+    const parsed = await resp.json();
     if (parsed.cohesionScore && Array.isArray(parsed.molecularLinks)) {
       return parsed as RecipeMolecularHarmony;
     }
     return getFallbackHarmony(recipe.name, uniqueIngs);
   } catch (error) {
-    console.warn("Fallo en llamada AI para armonía molecular, recurriendo a base de conocimiento offline:", error);
+    console.warn("Fallo en llamada al servidor para armonía molecular, recurriendo a base de conocimiento offline:", error);
     return getFallbackHarmony(recipe.name, uniqueIngs);
   }
 };
@@ -316,93 +253,24 @@ export const analyzeIngredientsMesaID = async (ingredients: string[]): Promise<M
   }
 
   try {
-    const ai = getAiClient();
-    const prompt = `Analiza en el laboratorio de maridajes moleculares la siguiente combinación de ingredientes que un chef está probando:
-Ingredientes seleccionados: ${clean.join(', ')}.
-
-TU OBJETIVO ES REALIZAR UN MAPA DE COMPATIBILIDAD AROMÁTICA (Flavor Network / FlavorDB):
-1. overallCompatibility: porcentaje global de compatibilidad (0-100%).
-2. profileSummary: descripción sintética del perfil conjunto.
-3. aromaFamilies: desglose en porcentaje de familias aromáticas (ej: Cítrico, Terroso, Tostado, etc. con nombre, percentage y color hex).
-4. links: enlaces par a par entre los ingredientes (source, target, compound específico que comparten ej: Eugenol, Metilpirazina, affinity 0-100, y description).
-5. bridgeSuggestions: 2 o 3 ingredientes puente que el chef podría incorporar para conectar mejor los ingredientes seleccionados.
-6. recommendedDrinkPairing: maridaje líquido ideal que comparta moléculas (nombre de la bebida, sharedCompound, pairingNotes).
-7. culinaryVerdict: veredicto profesional de I+D sobre el potencial de esta combinación.
-
-RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: "Eres un científico culinario de vanguardia. Analizas ingredientes como en The Flavor Matrix y FlavorDB. Responde siempre con rigor técnico y JSON exacto.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            overallCompatibility: { type: Type.NUMBER },
-            profileSummary: { type: Type.STRING },
-            aromaFamilies: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  percentage: { type: Type.NUMBER },
-                  color: { type: Type.STRING }
-                },
-                required: ["name", "percentage", "color"]
-              }
-            },
-            links: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  source: { type: Type.STRING },
-                  target: { type: Type.STRING },
-                  compound: { type: Type.STRING },
-                  affinity: { type: Type.NUMBER },
-                  description: { type: Type.STRING }
-                },
-                required: ["source", "target", "compound", "affinity", "description"]
-              }
-            },
-            bridgeSuggestions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  ingredient: { type: Type.STRING },
-                  bridgesWhat: { type: Type.STRING },
-                  scientificReason: { type: Type.STRING }
-                },
-                required: ["ingredient", "bridgesWhat", "scientificReason"]
-              }
-            },
-            recommendedDrinkPairing: {
-              type: Type.OBJECT,
-              properties: {
-                drink: { type: Type.STRING },
-                sharedCompound: { type: Type.STRING },
-                pairingNotes: { type: Type.STRING }
-              },
-              required: ["drink", "sharedCompound", "pairingNotes"]
-            },
-            culinaryVerdict: { type: Type.STRING }
-          },
-          required: ["overallCompatibility", "profileSummary", "aromaFamilies", "links", "bridgeSuggestions", "recommendedDrinkPairing", "culinaryVerdict"]
-        }
-      }
+    const resp = await fetch("/api/gemini/mesa-id", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ingredients: clean })
     });
 
-    const parsed = JSON.parse(response.text || "{}");
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody?.error || `HTTP ${resp.status}`);
+    }
+
+    const parsed = await resp.json();
     if (parsed.overallCompatibility && Array.isArray(parsed.links)) {
       return parsed as MesaIDAnalysis;
     }
     return getFallbackMesaID(clean);
   } catch (error) {
-    console.warn("Fallo en llamada AI para Mesa de I+D, recurriendo a base offline:", error);
+    console.warn("Fallo en llamada al servidor para Mesa de I+D, recurriendo a base offline:", error);
     return getFallbackMesaID(clean);
   }
 };
@@ -412,19 +280,18 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
 // -------------------------------------------------------------
 export const getMolecularPairings = async (ingredients: string[]): Promise<PairingResult> => {
   try {
-    const ai = getAiClient();
-    const prompt = `Analiza la compatibilidad molecular de estos ingredientes: ${ingredients.join(', ')}. Sugiere maridajes basados en moléculas compartidas (FlavorDB).`;
-    
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: "Eres un experto en gastronomía molecular. Tu objetivo es analizar ingredientes y sugerir maridajes basados en moléculas volátiles compartidas (lógica FlavorDB). Si recibes varios ingredientes, analiza su compatibilidad conjunta. Proporciona siempre: Nombre del maridaje, Explicación culinaria, Compuesto químico compartido (ej: Cumarina, Metoxipirazina) y un Porcentaje de afinidad (0-100%). RESPONDE SIEMPRE EN JSON.",
-        responseMimeType: "application/json"
-      }
+    const resp = await fetch("/api/gemini/molecular-pairings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ingredients })
     });
 
-    return JSON.parse(response.text || "{}");
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody?.error || `HTTP ${resp.status}`);
+    }
+
+    return await resp.json();
   } catch (e) {
     console.warn("Fallback getMolecularPairings:", e);
     return {
@@ -456,26 +323,18 @@ export const generateRecipeAI = async (params: {
   constraints: string[];
 }): Promise<any> => {
   try {
-    const ai = getAiClient();
-    const prompt = `Crea una receta culinaria profesional única basada en:
-  - Ingredientes: ${params.ingredients.join(', ')}
-  - Estilo/Vibe: ${params.vibe}
-  - Nivel Técnico: ${params.level}
-  - Objetivo: ${params.goal}
-  - Restricciones: ${params.constraints.join(', ')}
-  
-  La receta debe ser creativa y coherente. RESPONDE SIEMPRE EN JSON con estructura estándar.`;
-    
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: "Eres un Chef Creativo Senior. Genera una receta técnica profesional. RESPONDE SIEMPRE EN JSON con: { \"name\": string, \"description\": string, \"category\": string, \"yieldQuantity\": number, \"yieldUnit\": string, \"subRecipes\": [ { \"name\": string, \"ingredients\": [ { \"name\": string, \"quantity\": number, \"unit\": string, \"notes\": string } ], \"steps\": [ { \"step\": string } ] } ], \"chefTips\": string }",
-        responseMimeType: "application/json"
-      }
+    const resp = await fetch("/api/gemini/generate-recipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params)
     });
 
-    return JSON.parse(response.text || "{}");
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody?.error || `HTTP ${resp.status}`);
+    }
+
+    return await resp.json();
   } catch (e) {
     console.warn("Fallback generateRecipeAI:", e);
     return {
