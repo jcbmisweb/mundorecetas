@@ -257,7 +257,13 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
             if (remoteMod > localMod || (remoteVerified && !localVerified)) {
               recipesToUpdate.push({ ...localR, ...remoteR, synced: true });
               downloadedCount++;
-            } else if (localR.synced !== false && (remoteVerified !== localVerified || remoteR.name !== localR.name)) {
+            } else if (
+              localR.synced !== false &&
+              (remoteVerified !== localVerified ||
+                remoteR.verificationStatus !== localR.verificationStatus ||
+                remoteR.verificationNotes !== localR.verificationNotes ||
+                remoteR.name !== localR.name)
+            ) {
               recipesToUpdate.push({ ...localR, ...remoteR, synced: true });
               downloadedCount++;
             }

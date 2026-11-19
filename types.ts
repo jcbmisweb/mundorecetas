@@ -446,7 +446,9 @@ export interface Recipe {
   pastryInfographic?: string; // Infografía técnica didáctica de pastelería
   infographicUrl?: string; // Enlace directo o de Google Drive a infografía externa
   linkedRecipeIds?: string[]; // IDs de recetas enlazadas (salsas, guarniciones, cremas, bizcochos, etc.)
-  isVerified?: boolean; // Ficha elaborada, probada en cocina y verificada como correcta
+  isVerified?: boolean; // Ficha elaborada, probada en cocina y verificada
+  verificationStatus?: 'ok' | 'fail'; // 'ok' (Pulgar arriba - fue bien) o 'fail' (Pulgar abajo - fue mal / falló)
+  verificationNotes?: string; // Anotaciones privadas del profesor (solo visible al abrir la verificación)
   verifiedAt?: number;
   lastModified: number;
   createdAt?: number;

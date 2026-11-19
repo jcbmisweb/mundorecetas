@@ -46,6 +46,9 @@
         "serviceDetails": { "type": "object" },
         "extraAllergens": { "type": "array", "items": { "type": "string" } },
         "isVerified": { "type": "boolean" },
+        "verificationStatus": { "type": "string", "enum": ["ok", "fail"] },
+        "verificationNotes": { "type": "string" },
+        "verifiedAt": { "type": "number" },
         "lastModified": { "type": "number" },
         "totalCost": { "type": "number" }
       },

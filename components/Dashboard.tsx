@@ -6,12 +6,13 @@ import {
   Database, LogOut, FileJson, Sparkles, Users, Coins, Tag, ShoppingCart, 
   UserCheck, Lock, Unlock, Copy, FlaskConical, Server, CheckCircle2, AlertCircle, RefreshCw, X, Compass,
   LayoutGrid, Maximize2, Wand2, ShieldCheck, BookOpen, Layers, Cloud, HardDrive, Upload, Wifi, WifiOff, FileSpreadsheet,
-  List, Laptop, School, Check
+  List, Laptop, School, Check, ThumbsUp, ThumbsDown, MessageSquare
 } from 'lucide-react';
 import { CategoryStripe } from './CategoryStripe';
 import { AllergenIcon } from './AllergenIcon';
 import { FlavorLab } from './FlavorLab';
 import { getEmergencyDrafts, removeEmergencyDraft } from '../lib/imageUtils';
+import { VerificationModal } from './VerificationModal';
 
 interface DashboardProps {
   recipes: Recipe[];
@@ -42,6 +43,7 @@ interface DashboardProps {
   onToggleMobileSidebar?: () => void;
   onDuplicate: (recipe: Recipe) => void;
   onOpenAlphabeticalIndex?: () => void;
+  onUpdateRecipe?: (recipe: Recipe) => Promise<void> | void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ 
@@ -50,13 +52,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNew, onEdit, onView, onDelete, onTogglePublic, onImport, onOpenSettings, 
   onOpenMenuPlanner, onOpenProductDB, onOpenAIBridge, onOpenPromptHub, onOpenAuditModal, 
   onOpenUserManagement, onOpenMigration, onOpenProWorkshop, onLogout, 
-  onToggleMobileSidebar, onDuplicate, onOpenAlphabeticalIndex
+  onToggleMobileSidebar, onDuplicate, onOpenAlphabeticalIndex, onUpdateRecipe
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [offlineStatusFilter, setOfflineStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
   const [displayLimit, setDisplayLimit] = useState(12);
   const [showFlavorLab, setShowFlavorLab] = useState(false);
+  const [verifyingRecipe, setVerifyingRecipe] = useState<Recipe | null>(null);
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [dbLatency, setDbLatency] = useState<number | null>(null);
   const [showDbModal, setShowDbModal] = useState(false);
@@ -808,10 +811,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {recipe.synced ? 'Nube' : 'Local'}
                     </span>
                     {recipe.isVerified && (
-                      <span className="px-2 py-1 rounded-lg bg-emerald-600 text-white font-black text-[8px] uppercase tracking-wider flex items-center gap-1 shadow-2xs" title="Ficha verificada y correcta">
-                        <CheckCircle2 size={11} />
-                        <span>Verificada</span>
-                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setVerifyingRecipe(recipe); }}
+                        className={`px-2 py-1 rounded-lg text-white font-black text-[8px] uppercase tracking-wider flex items-center gap-1 shadow-2xs transition-transform hover:scale-105 cursor-pointer ${
+                          recipe.verificationStatus === 'fail' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                        }`}
+                        title={
+                          recipe.verificationStatus === 'fail'
+                            ? 'Verificada como FALLÓ / Revisar — Pulsa para ver anotaciones del profesor'
+                            : 'Verificada positivamente (Me gusta) — Pulsa para ver anotaciones del profesor'
+                        }
+                      >
+                        {recipe.verificationStatus === 'fail' ? <ThumbsDown size={11} /> : <ThumbsUp size={11} />}
+                        <span>{recipe.verificationStatus === 'fail' ? 'Falló' : 'Verificada'}</span>
+                        {recipe.verificationNotes && recipe.verificationNotes.trim().length > 0 && (
+                          <MessageSquare size={9} className="opacity-90" />
+                        )}
+                      </button>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); onEdit(recipe); }}
@@ -870,10 +887,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
 
                     {recipe.isVerified && (
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white font-black text-[7px] uppercase tracking-tight flex items-center gap-0.5 shadow-2xs" title="Ficha verificada y correcta">
-                        <CheckCircle2 size={8} />
-                        <span>Verificada</span>
-                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setVerifyingRecipe(recipe); }}
+                        className={`px-1.5 py-0.5 rounded text-white font-black text-[7px] uppercase tracking-tight flex items-center gap-0.5 shadow-2xs transition-transform hover:scale-105 cursor-pointer ${
+                          recipe.verificationStatus === 'fail' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                        }`}
+                        title={
+                          recipe.verificationStatus === 'fail'
+                            ? 'Falló / Revisar — Pulsa para ver anotaciones del profesor'
+                            : 'Verificada (Me gusta) — Pulsa para ver anotaciones del profesor'
+                        }
+                      >
+                        {recipe.verificationStatus === 'fail' ? <ThumbsDown size={8} /> : <ThumbsUp size={8} />}
+                        <span>{recipe.verificationStatus === 'fail' ? 'Mal' : 'Bien'}</span>
+                        {recipe.verificationNotes && recipe.verificationNotes.trim().length > 0 && (
+                          <MessageSquare size={7} className="opacity-90" />
+                        )}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1046,10 +1077,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
 
                     {recipe.isVerified && (
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-black text-[7.5px] uppercase tracking-tight flex items-center gap-1 shadow-2xs" title="Ficha verificada y correcta">
-                        <CheckCircle2 size={9} />
-                        <span>Verificada</span>
-                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setVerifyingRecipe(recipe); }}
+                        className={`px-2 py-0.5 rounded-md text-white font-black text-[7.5px] uppercase tracking-tight flex items-center gap-1 shadow-2xs transition-transform hover:scale-105 cursor-pointer ${
+                          recipe.verificationStatus === 'fail' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                        }`}
+                        title={
+                          recipe.verificationStatus === 'fail'
+                            ? 'Verificada como FALLÓ / Revisar — Pulsa para ver anotaciones del profesor'
+                            : 'Verificada positivamente (Me gusta) — Pulsa para ver anotaciones del profesor'
+                        }
+                      >
+                        {recipe.verificationStatus === 'fail' ? <ThumbsDown size={9} /> : <ThumbsUp size={9} />}
+                        <span>{recipe.verificationStatus === 'fail' ? 'Falló' : 'Verificada'}</span>
+                        {recipe.verificationNotes && recipe.verificationNotes.trim().length > 0 && (
+                          <MessageSquare size={8} className="opacity-90" />
+                        )}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1266,6 +1311,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
           </div>
+        )}
+
+        {verifyingRecipe && (
+          <VerificationModal
+            isOpen={!!verifyingRecipe}
+            recipe={verifyingRecipe}
+            onClose={() => setVerifyingRecipe(null)}
+            onSave={async (updates) => {
+              const updatedRecipe: Recipe = {
+                ...verifyingRecipe,
+                ...updates,
+                lastModified: Date.now(),
+              };
+              if (onUpdateRecipe) {
+                await onUpdateRecipe(updatedRecipe);
+              } else {
+                onImport(updatedRecipe);
+              }
+            }}
+          />
         )}
       </div>
     </div>

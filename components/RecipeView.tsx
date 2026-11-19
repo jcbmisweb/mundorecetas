@@ -41,6 +41,8 @@ import {
   Plus,
   Minus,
   AlertCircle,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 
 import { CategoryStripe } from "./CategoryStripe";
@@ -49,6 +51,7 @@ import { MolecularPairings } from "./MolecularPairings";
 import { VideoListDisplay } from "./VideoListDisplay";
 import { hasValidVideos } from "../lib/videoUtils";
 import { ImagePromptModal } from "./ImagePromptModal";
+import { VerificationModal } from "./VerificationModal";
 
 interface RecipeViewProps {
   recipe: Recipe;
@@ -61,6 +64,7 @@ interface RecipeViewProps {
   allRecipes?: Recipe[];
   productDatabase?: Product[];
   onSelectRecipe?: (recipe: Recipe) => void;
+  onUpdateRecipe?: (recipe: Recipe) => Promise<void> | void;
 }
 
 export const normalizeAllergen = (input: string): Allergen | null => {
@@ -149,6 +153,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
   allRecipes,
   productDatabase,
   onSelectRecipe,
+  onUpdateRecipe,
 }) => {
   const [dynamicPax, setDynamicPax] = useState<number>(
     recipe.yieldQuantity || 4,
@@ -159,6 +164,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
   >("complete");
   const [includeAnalysis, setIncludeAnalysis] = useState<boolean>(true);
   const [showPromptModal, setShowPromptModal] = useState<boolean>(false);
+  const [showVerificationModal, setShowVerificationModal] = useState<boolean>(false);
 
   useEffect(() => {
     const originalTitle = document.title;
@@ -403,6 +409,49 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             >
               <Printer size={18} fill="currentColor" className="opacity-90" />
               <span>Imprimir Ficha</span>
+            </button>
+
+            {/* BOTÓN DE VERIFICACIÓN DOCENTE (PULGAR ARRIBA / ABAJO + ANOTACIONES PRIVADAS) */}
+            <button
+              type="button"
+              onClick={() => setShowVerificationModal(true)}
+              className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl font-black uppercase text-[11px] tracking-wider shadow-sm transition-all cursor-pointer border-2 ${
+                !recipe.isVerified
+                  ? "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                  : recipe.verificationStatus === "fail"
+                  ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-700 shadow-md"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 shadow-md"
+              }`}
+              title="Abrir el panel de verificación para marcar pulgar arriba/abajo y leer o escribir anotaciones del profesor (no se imprime)"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {!recipe.isVerified ? (
+                  <ShieldCheck size={16} className="text-slate-400 shrink-0" />
+                ) : recipe.verificationStatus === "fail" ? (
+                  <ThumbsDown size={16} className="text-white shrink-0" />
+                ) : (
+                  <ThumbsUp size={16} className="text-white shrink-0" />
+                )}
+                <span className="truncate">
+                  {!recipe.isVerified
+                    ? "Evaluar / Verificar"
+                    : recipe.verificationStatus === "fail"
+                    ? "Falló · Ver notas"
+                    : "Bien · Ver notas"}
+                </span>
+              </div>
+              {recipe.verificationNotes && recipe.verificationNotes.trim().length > 0 && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold flex items-center gap-1 shrink-0 ${
+                    !recipe.isVerified
+                      ? "bg-slate-200 text-slate-700"
+                      : "bg-white/20 text-white"
+                  }`}
+                >
+                  <MessageSquare size={10} />
+                  <span>Nota</span>
+                </span>
+              )}
             </button>
 
             {/* AVISO PDF LIMPIO SIN URL NI FECHA */}
@@ -2049,6 +2098,27 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
           recipe.importantNotes || recipe.serviceDetails?.importantNotes
         }
         takeAwayDetails={recipe.takeAwayDetails}
+      />
+
+      {/* Modal Privado de Verificación y Anotaciones del Profesor */}
+      <VerificationModal
+        isOpen={showVerificationModal}
+        recipe={recipe}
+        onClose={() => setShowVerificationModal(false)}
+        onSave={async (updates) => {
+          if (onUpdateRecipe) {
+            await onUpdateRecipe({
+              ...recipe,
+              ...updates,
+              lastModified: Date.now(),
+            });
+          } else {
+            onEdit({
+              ...recipe,
+              ...updates,
+            });
+          }
+        }}
       />
     </div>
   );

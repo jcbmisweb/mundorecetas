@@ -1020,10 +1020,12 @@ function App() {
         return next;
       });
 
-      // 2. PASO 2 (INSTANTÁNEO): Redirigir de inmediato al Dashboard
+      // 2. PASO 2 (INSTANTÁNEO): Redirigir al Dashboard o actualizar ficha en vista actual
       if (redirect) {
         setViewState('DASHBOARD');
         setCurrentRecipe(null);
+      } else {
+        setCurrentRecipe(prev => (prev && prev.id === recipeToSave.id ? recipeToSave : prev));
       }
 
       // 3. PASO 3: Guardar en Dexie (disco local del PC) de forma prioritaria
@@ -1033,7 +1035,7 @@ function App() {
           removeEmergencyDraft(recipeToSave.id);
           appendRecipeHistory(recipeToSave);
 
-          const safeRecipe = await ensureRecipeFitsFirestore(recipeToSave);
+          const safeRecipe = cleanForFirestore(await ensureRecipeFitsFirestore(recipeToSave));
 
           // Si hay conexión y no está agotada la cuota de Firebase, sincronizar en la nube
           if (navigator.onLine && !getIsQuotaExceeded()) {
@@ -1047,6 +1049,9 @@ function App() {
               ]);
               await saveRecipeLocal(safeRecipe, true);
               setRecipes(prev => prev.map(r => r.id === safeRecipe.id ? { ...r, synced: true } : r));
+              if (!redirect) {
+                setCurrentRecipe(prev => (prev && prev.id === safeRecipe.id ? { ...prev, synced: true } : prev));
+              }
             } catch (syncErr: any) {
               const msg = syncErr?.message || String(syncErr);
               if (msg.includes('Quota') || msg.includes('quota') || syncErr?.code === 'resource-exhausted') {
@@ -2133,6 +2138,7 @@ function App() {
                   allRecipes={recipes}
                   productDatabase={productDatabase}
                   onSelectRecipe={(r) => { setCurrentRecipe(r); setViewState('VIEWER'); }}
+                  onUpdateRecipe={(updated) => handleSave(updated, false)}
                 />
               </ErrorBoundary>
             ) : viewState === 'EDITOR' ? (
@@ -2277,6 +2283,7 @@ function App() {
                 syncState={syncState}
                 onTriggerSync={handleTriggerFullSync}
                 onRefreshAllData={handleRefreshAllData}
+                onUpdateRecipe={(updated) => handleSave(updated, false)}
               />
             )}
           </div>

@@ -13,13 +13,14 @@ import { calculateIngredientCost } from '../lib/costUtils';
 import { compressImage, compressHeroBannerImage, getImageAspect } from '../lib/imageUtils';
 import { uploadFileToDrive, transformDriveUrl, GOOGLE_DRIVE_FOLDER_ID, sanitizeFileName } from '../lib/googleDriveService';
 import { ImagePromptModal } from './ImagePromptModal';
+import { VerificationModal } from './VerificationModal';
 import { findSimilarProducts, matchProductInCatalog, reconcileIngredientWithCatalog, reconcileRecipeWithCatalog, normalizeText } from '../lib/productUtils';
 import { 
   Save, X, Plus, Trash2, Image as ImageIcon, 
   Book, Utensils, Thermometer, Info, Database, MessageSquare, ChevronDown, CheckCircle2,
   ChefHat, Users, Camera, DatabaseZap, Check, HelpCircle, AlertOctagon, Sparkles,
   ShoppingBag, Box, Clock, Scissors, Flame, ArrowRight, AlertCircle, RefreshCw,
-  Ban, Percent, Truck, Search, Filter, FileText
+  Ban, Percent, Truck, Search, Filter, FileText, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 
 interface RecipeEditorProps {
@@ -85,6 +86,9 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   const [recipeVideos, setRecipeVideos] = useState<VideoLink[]>([]);
   const [isPublic, setIsPublic] = useState(false);
   const [isVerified, setIsVerified] = useState<boolean>(initialRecipe?.isVerified ?? false);
+  const [verificationStatus, setVerificationStatus] = useState<'ok' | 'fail'>(initialRecipe?.verificationStatus || 'ok');
+  const [verificationNotes, setVerificationNotes] = useState<string>(initialRecipe?.verificationNotes || '');
+  const [showVerificationModal, setShowVerificationModal] = useState<boolean>(false);
   const [platingInstructions, setPlatingInstructions] = useState('');
   const [presentation, setPresentation] = useState('');
   const [importantNotes, setImportantNotes] = useState('');
@@ -201,6 +205,8 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       setRecipeVideos(normalizeVideos(initialRecipe.videos, initialRecipe.sourceUrl || initialRecipe.videoUrl));
       setIsPublic(initialRecipe.isPublic || false);
       setIsVerified(initialRecipe.isVerified ?? false);
+      setVerificationStatus(initialRecipe.verificationStatus || 'ok');
+      setVerificationNotes(initialRecipe.verificationNotes || '');
       setServiceDetails(initialRecipe.serviceDetails || emptyServiceDetails);
       setRecipeType(initialRecipe.recipeType || initialRecipe.takeAwayDetails?.recipeType || (initialRecipe.takeAwayDetails?.isTakeAway ? 'takeaway' : 'normal'));
       setPastryInfographic(initialRecipe.pastryInfographic || initialRecipe.takeAwayDetails?.pastryInfographic || '');
@@ -626,6 +632,8 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         },
         linkedRecipeIds,
         isVerified: Boolean(isVerified),
+        verificationStatus: isVerified ? verificationStatus : undefined,
+        verificationNotes: verificationNotes.trim(),
         verifiedAt: isVerified ? (initialRecipe?.verifiedAt || Date.now()) : undefined,
         lastModified: Date.now()
       } as any);
@@ -665,16 +673,33 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            onClick={() => setIsVerified(!isVerified)}
+            onClick={() => setShowVerificationModal(true)}
             className={`px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md ${
-              isVerified
-                ? 'bg-emerald-600 text-white border-2 border-emerald-700'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200'
+              !isVerified
+                ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200'
+                : verificationStatus === 'fail'
+                ? 'bg-rose-600 hover:bg-rose-700 text-white border-2 border-rose-700'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-emerald-700'
             }`}
-            title="Haz clic para marcar / desmarcar esta receta como verificada y correcta"
+            title="Haz clic para abrir la verificación (👍 Fue bien / 👎 Falló) y ver o escribir anotaciones del profesor"
           >
-            <CheckCircle2 size={16} className={isVerified ? 'text-white' : 'text-slate-400'} />
-            <span>{isVerified ? '✓ Verificada' : 'Sin verificar'}</span>
+            {!isVerified ? (
+              <CheckCircle2 size={16} className="text-slate-400" />
+            ) : verificationStatus === 'fail' ? (
+              <ThumbsDown size={16} className="text-white" />
+            ) : (
+              <ThumbsUp size={16} className="text-white" />
+            )}
+            <span>
+              {!isVerified
+                ? 'Sin verificar'
+                : verificationStatus === 'fail'
+                ? 'Falló / Revisar'
+                : 'Verificada'}
+            </span>
+            {verificationNotes.trim().length > 0 && (
+              <MessageSquare size={13} className="opacity-90 ml-0.5" />
+            )}
           </button>
           <button 
             type="button"
@@ -1117,19 +1142,36 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                   </button>
                </div>
                <div className="p-4">
-                  <label className="block text-[10px] font-black text-emerald-700 uppercase mb-2">Estado de Verificación</label>
+                  <label className="block text-[10px] font-black text-emerald-700 uppercase mb-2">Verificación & Anotaciones</label>
                   <button 
                     type="button" 
-                    onClick={() => setIsVerified(!isVerified)}
+                    onClick={() => setShowVerificationModal(true)}
                     className={`w-full px-4 py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${
-                      isVerified 
-                        ? 'bg-emerald-600 text-white shadow-md border-2 border-emerald-700' 
-                        : 'bg-slate-50 text-slate-400 border-2 border-slate-100 hover:bg-slate-100'
+                      !isVerified
+                        ? 'bg-slate-50 text-slate-500 border-2 border-slate-100 hover:bg-slate-100'
+                        : verificationStatus === 'fail'
+                        ? 'bg-rose-600 text-white shadow-md border-2 border-rose-700 hover:bg-rose-700'
+                        : 'bg-emerald-600 text-white shadow-md border-2 border-emerald-700 hover:bg-emerald-700'
                     }`}
-                    title="Marca esta casilla cuando la receta haya sido elaborada, probada y validada como correcta"
+                    title="Abrir la verificación (pulgar arriba/abajo) y anotaciones privadas del profesor"
                   >
-                    <CheckCircle2 size={15} className={isVerified ? 'text-white' : 'text-slate-400'} />
-                    <span>{isVerified ? '✓ VERIFICADA Y CORRECTA' : 'Pendiente de verificar'}</span>
+                    {!isVerified ? (
+                      <CheckCircle2 size={15} className="text-slate-400" />
+                    ) : verificationStatus === 'fail' ? (
+                      <ThumbsDown size={15} className="text-white" />
+                    ) : (
+                      <ThumbsUp size={15} className="text-white" />
+                    )}
+                    <span>
+                      {!isVerified
+                        ? 'Pendiente de verificar'
+                        : verificationStatus === 'fail'
+                        ? 'VERIFICADA · FALLÓ (Ver notas)'
+                        : 'VERIFICADA · BIEN (Ver notas)'}
+                    </span>
+                    {verificationNotes.trim().length > 0 && (
+                      <MessageSquare size={13} className="opacity-90" />
+                    )}
                   </button>
                </div>
                <div className="md:col-span-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -2516,6 +2558,41 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         presentation={presentation || platingInstructions || serviceDetails.presentation}
         importantNotes={importantNotes || serviceDetails.importantNotes}
         takeAwayDetails={takeAwayDetails}
+      />
+
+      <VerificationModal
+        isOpen={showVerificationModal}
+        recipe={{
+          ...(initialRecipe || {
+            id: '',
+            name: name || 'Nueva Ficha',
+            category: categories[0] || '',
+            categories,
+            photo,
+            creator,
+            workspaceId: appUser?.workspaceId || '',
+            isPublic,
+            yieldQuantity,
+            yieldUnit,
+            subRecipes,
+            platingInstructions,
+            serviceDetails,
+            lastModified: Date.now()
+          }),
+          name: name || initialRecipe?.name || 'Ficha Técnica',
+          isVerified,
+          verificationStatus,
+          verificationNotes,
+          verifiedAt: initialRecipe?.verifiedAt
+        }}
+        onClose={() => setShowVerificationModal(false)}
+        onSave={(updates) => {
+          setIsVerified(updates.isVerified);
+          if (updates.verificationStatus) {
+            setVerificationStatus(updates.verificationStatus);
+          }
+          setVerificationNotes(updates.verificationNotes);
+        }}
       />
     </div>
   );
