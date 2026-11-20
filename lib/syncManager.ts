@@ -1,8 +1,9 @@
 import { localDB, getUnsyncedLocalData } from '../db/dexieDB';
 import { Recipe, Product, MenuPlan, ProRecipe } from '../types';
 import { db } from '../firebase';
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { ensureRecipeFitsFirestore } from './imageUtils';
+import { fetchScopedCollection } from './firestoreQueries';
 
 export interface SyncStatus {
   isSyncing: boolean;
@@ -93,9 +94,7 @@ const notifyListeners = async (msg?: string) => {
 
 export const cleanForFirestore = <T>(obj: T): T => {
   if (obj === null || obj === undefined) return obj;
-  return JSON.parse(JSON.stringify(obj, (_key, value) => {
-    return value === undefined ? null : value;
-  }));
+  return JSON.parse(JSON.stringify(obj));
 };
 
 /**
@@ -231,8 +230,7 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
     if (!quotaHit) {
       try {
         // A. Descargar y fusionar recetas
-        const snap = await getDocs(collection(db, 'recipes'));
-        const remoteDocs = snap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Recipe));
+        const remoteDocs = await fetchScopedCollection<Recipe>('recipes', null, { synced: true });
         const localRecipes = await localDB.recipes.toArray();
         const localMap = new Map<string, Recipe>(localRecipes.map(r => [r.id, r]));
 
@@ -276,8 +274,7 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
 
         // B. Descargar productos remotos que falten o estén actualizados
         try {
-          const prodSnap = await getDocs(collection(db, 'products'));
-          const remoteProds = prodSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Product));
+          const remoteProds = await fetchScopedCollection<Product>('products', null, { synced: true });
           const localProds = await localDB.products.toArray();
           const localProdMap = new Map(localProds.map(p => [p.id, p]));
           const prodsToPut: Product[] = [];
@@ -299,15 +296,13 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
         try {
           let remoteMenus: MenuPlan[] = [];
           try {
-            const menuSnap = await getDocs(collection(db, 'menuPlans'));
-            remoteMenus = menuSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+            remoteMenus = await fetchScopedCollection<MenuPlan>('menuPlans', null, { synced: true });
           } catch (e1) {
             console.warn('[Sync] Advertencia menuPlans:', e1);
           }
           if (remoteMenus.length === 0) {
             try {
-              const altSnap = await getDocs(collection(db, 'menu_plans'));
-              remoteMenus = altSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+              remoteMenus = await fetchScopedCollection<MenuPlan>('menu_plans', null, { synced: true });
             } catch (e2) {
               console.warn('[Sync] Advertencia menu_plans:', e2);
             }
@@ -331,8 +326,7 @@ export const executeCloudSync = async (forceParam: any = false): Promise<{
 
         // D. Descargar proRecipes remotas que falten
         try {
-          const proSnap = await getDocs(collection(db, 'proRecipes'));
-          const remotePros = proSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as ProRecipe));
+          const remotePros = await fetchScopedCollection<ProRecipe>('proRecipes', null, { synced: true });
           const localPros = await localDB.proRecipes.toArray();
           const localProMap = new Map(localPros.map(p => [p.id, p]));
           const prosToPut: ProRecipe[] = [];
@@ -461,8 +455,7 @@ export const executeDailyVerification = async (force: boolean = false): Promise<
 
     let remoteDocs: Recipe[] = [];
     try {
-      const snap = await getDocs(collection(db, 'recipes'));
-      remoteDocs = snap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Recipe));
+      remoteDocs = await fetchScopedCollection<Recipe>('recipes', null, { synced: true });
     } catch (err: any) {
       const errMsg = err?.message || String(err);
       if (errMsg.includes('Quota') || errMsg.includes('quota') || err?.code === 'resource-exhausted') {
@@ -574,8 +567,7 @@ export const forcePullFromCloud = async (): Promise<{
 
   try {
     // 1. Recetas
-    const recipeSnap = await getDocs(collection(db, 'recipes'));
-    const remoteRecipes = recipeSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Recipe));
+    const remoteRecipes = await fetchScopedCollection<Recipe>('recipes', null, { synced: true });
     if (remoteRecipes.length > 0) {
       await localDB.recipes.bulkPut(remoteRecipes);
     }
@@ -583,8 +575,7 @@ export const forcePullFromCloud = async (): Promise<{
     // 2. Materias primas / productos
     let remoteProds: Product[] = [];
     try {
-      const prodSnap = await getDocs(collection(db, 'products'));
-      remoteProds = prodSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Product));
+      remoteProds = await fetchScopedCollection<Product>('products', null, { synced: true });
       if (remoteProds.length > 0) {
         await localDB.products.bulkPut(remoteProds);
       }
@@ -595,11 +586,9 @@ export const forcePullFromCloud = async (): Promise<{
     // 3. Menús
     let remoteMenus: MenuPlan[] = [];
     try {
-      let menuSnap = await getDocs(collection(db, 'menuPlans'));
-      remoteMenus = menuSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+      remoteMenus = await fetchScopedCollection<MenuPlan>('menuPlans', null, { synced: true });
       if (remoteMenus.length === 0) {
-        const altSnap = await getDocs(collection(db, 'menu_plans'));
-        remoteMenus = altSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as MenuPlan));
+        remoteMenus = await fetchScopedCollection<MenuPlan>('menu_plans', null, { synced: true });
       }
       if (remoteMenus.length > 0) {
         await localDB.menuPlans.bulkPut(remoteMenus);
@@ -611,8 +600,7 @@ export const forcePullFromCloud = async (): Promise<{
     // 4. ProRecipes
     let remotePros: ProRecipe[] = [];
     try {
-      const proSnap = await getDocs(collection(db, 'proRecipes'));
-      remotePros = proSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as ProRecipe));
+      remotePros = await fetchScopedCollection<ProRecipe>('proRecipes', null, { synced: true });
       if (remotePros.length > 0) {
         await localDB.proRecipes.bulkPut(remotePros);
       }

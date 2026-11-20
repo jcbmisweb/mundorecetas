@@ -12,6 +12,7 @@ import { normalizeVideos, sanitizeVideoUrl } from '../lib/videoUtils';
 import { calculateIngredientCost } from '../lib/costUtils';
 import { compressImage, compressHeroBannerImage, getImageAspect } from '../lib/imageUtils';
 import { uploadFileToDrive, transformDriveUrl, GOOGLE_DRIVE_FOLDER_ID, sanitizeFileName } from '../lib/googleDriveService';
+import { validateUploadedFile, ALLOWED_IMAGE_MIME_TYPES, ALLOWED_DOC_MIME_TYPES, sanitizeImageSrc } from '../lib/urlUtils';
 import { ImagePromptModal } from './ImagePromptModal';
 import { VerificationModal } from './VerificationModal';
 import { findSimilarProducts, matchProductInCatalog, reconcileIngredientWithCatalog, reconcileRecipeWithCatalog, normalizeText } from '../lib/productUtils';
@@ -478,10 +479,24 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   };
 
   const processFiles = async (files: File[], subIdx: number, uploadToDrive: boolean = false) => {
+    const validFiles = files.filter((f) => {
+      const check = validateUploadedFile(f, {
+        allowedMimeTypes: ALLOWED_IMAGE_MIME_TYPES,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+        maxSizeBytes: 15 * 1024 * 1024,
+      });
+      if (!check.valid) {
+        alert(`${f.name}: ${check.error}`);
+        return false;
+      }
+      return true;
+    });
+    if (validFiles.length === 0) return;
+
     const newSubs = [...subRecipes];
     try {
       if (uploadToDrive) {
-        const urls = await Promise.all(files.map(async (f, fIdx) => {
+        const urls = await Promise.all(validFiles.map(async (f, fIdx) => {
           const cleanRecipe = name ? sanitizeFileName(name) : 'receta';
           const cleanSub = subRecipes[subIdx]?.name ? sanitizeFileName(subRecipes[subIdx].name) : `paso_${subIdx + 1}`;
           const res = await uploadFileToDrive(f, GOOGLE_DRIVE_FOLDER_ID, `RECETA_${cleanRecipe}_${cleanSub}_foto${fIdx + 1}`);
@@ -489,7 +504,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         }));
         newSubs[subIdx].photos = [...(newSubs[subIdx].photos || []), ...urls];
       } else {
-        const results = await Promise.all(files.map(file => compressImage(file)));
+        const results = await Promise.all(validFiles.map(file => compressImage(file)));
         newSubs[subIdx].photos = [...(newSubs[subIdx].photos || []), ...results];
       }
       setSubRecipes(newSubs);
@@ -514,6 +529,15 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   };
 
   const processMainPhoto = async (file: File) => {
+    const check = validateUploadedFile(file, {
+      allowedMimeTypes: ALLOWED_IMAGE_MIME_TYPES,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+      maxSizeBytes: 15 * 1024 * 1024,
+    });
+    if (!check.valid) {
+      alert(check.error || 'Formato de imagen no permitido.');
+      return;
+    }
     try {
       if (confirm("¿Subir portada directamente a tu carpeta de Google Drive en ALTA RESOLUCIÓN (ahorra espacio en BD)?")) {
         setPhotoFeedback("☁️ Subiendo portada a Google Drive...");
@@ -1048,10 +1072,20 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                     <div className="flex flex-col sm:flex-row items-center gap-2">
                       <input 
                         type="file" 
-                        accept="image/*,application/pdf"
+                        accept="image/png,image/jpeg,image/webp,image/gif,application/pdf"
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
+                          const check = validateUploadedFile(file, {
+                            allowedMimeTypes: ALLOWED_DOC_MIME_TYPES,
+                            allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'],
+                            maxSizeBytes: 20 * 1024 * 1024,
+                          });
+                          if (!check.valid) {
+                            alert(check.error || 'Archivo de infografía no válido.');
+                            e.target.value = '';
+                            return;
+                          }
                           try {
                             if (confirm("¿Subir directamente a tu carpeta de Google Drive en ALTA RESOLUCIÓN (sin comprimir)?")) {
                               alert("Iniciando subida a tu carpeta de Google Drive...");
@@ -1103,8 +1137,8 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
 
                   {pastryInfographic && (
                     <div className="mt-3 p-2.5 bg-white rounded-xl border border-indigo-100 flex items-center gap-4">
-                      {pastryInfographic.startsWith('data:image') || pastryInfographic.startsWith('http') || pastryInfographic.includes('googleusercontent.com') ? (
-                        <img src={pastryInfographic} alt="Infografía Técnica" className="h-20 w-32 object-cover rounded-lg border border-slate-200 shadow-xs" />
+                      {sanitizeImageSrc(pastryInfographic) ? (
+                        <img src={sanitizeImageSrc(pastryInfographic)} alt="Infografía Técnica" className="h-20 w-32 object-cover rounded-lg border border-slate-200 shadow-xs" />
                       ) : (
                         <div className="h-20 w-32 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-800 font-bold text-xs text-center p-1">
                           PDF / Documento Anexo

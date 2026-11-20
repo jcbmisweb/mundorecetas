@@ -1,24 +1,43 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import {
+  applySecurityHeaders,
+  enforceStrictCors,
+  enforceRateLimit,
+  sanitizePromptText,
+  sanitizeStringArray,
+  sendSafeServerError,
+  logSecurityEvent,
+  getClientIp,
+} from "../../lib/apiSecurity";
 
 const GEMINI_MODEL = "gemini-4-hydrogen";
 
 export default async function handler(req: any, res: any) {
+  applySecurityHeaders(req, res, { isStandaloneProd: true, noStore: true });
+
+  if (!enforceStrictCors(req, res, "/api/gemini/recipe-harmony")) return;
+
   if (req.method !== "POST") {
+    logSecurityEvent("METHOD_NOT_ALLOWED", { endpoint: "/api/gemini/recipe-harmony", ip: getClientIp(req) });
     return res.status(405).json({ error: "Method not allowed" });
   }
+
+  if (!enforceRateLimit(req, res, "/api/gemini/recipe-harmony")) return;
+
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server." });
+      return res.status(503).json({ error: "Servicio de análisis no disponible temporalmente." });
     }
 
     const { recipeName, categories, ingredients } = req.body || {};
-    const ingList: string[] = Array.isArray(ingredients)
-      ? ingredients.map((i: any) => String(i).trim()).filter(Boolean).slice(0, 15)
-      : [];
+    const cleanName = sanitizePromptText(recipeName, 120) || "Receta";
+    const cleanCats = sanitizeStringArray(categories, 8, 40);
+    const ingList = sanitizeStringArray(ingredients, 15, 80);
 
     if (ingList.length === 0) {
-      return res.status(400).json({ error: "Se requieren ingredientes para analizar la armonía." });
+      logSecurityEvent("INVALID_PAYLOAD", { endpoint: "/api/gemini/recipe-harmony", ip: getClientIp(req) });
+      return res.status(400).json({ error: "Se requieren ingredientes válidos para analizar la armonía." });
     }
 
     const ai = new GoogleGenAI({
@@ -26,9 +45,9 @@ export default async function handler(req: any, res: any) {
       httpOptions: { headers: { "User-Agent": "aistudio-build" } },
     });
 
-    const catText = Array.isArray(categories) && categories.length > 0 ? categories.join(", ") : "General";
+    const catText = cleanCats.length > 0 ? cleanCats.join(", ") : "General";
     const prompt = `Analiza la armonía y química molecular interna de esta receta gastronómica profesional:
-Nombre de la receta: "${String(recipeName || "Receta")}"
+Nombre de la receta: "${cleanName}"
 Categorías: ${catText}
 Ingredientes del escandallo: ${ingList.join(", ")}.
 
@@ -100,7 +119,7 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
     });
 
     return res.status(200).json(JSON.parse(response.text || "{}"));
-  } catch (err: any) {
-    return res.status(500).json({ error: err?.message || "Error en la llamada a Gemini API" });
+  } catch (err: unknown) {
+    return sendSafeServerError(res, "/api/gemini/recipe-harmony", err);
   }
 }

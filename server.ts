@@ -1,6 +1,16 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
+import {
+  applySecurityHeaders,
+  enforceStrictCors,
+  enforceRateLimit,
+  sanitizePromptText,
+  sanitizeStringArray,
+  sendSafeServerError,
+  logSecurityEvent,
+  getClientIp,
+} from "./lib/apiSecurity";
 
 const GEMINI_MODEL = "gemini-4-hydrogen";
 
@@ -19,40 +29,88 @@ function getAiClient(): GoogleGenAI {
   });
 }
 
-function extractStatus(err: any): number {
-  const status = Number(err?.status || err?.code);
-  if (status >= 400 && status < 600) return status;
-  return 500;
-}
-
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
+  const isProd = process.env.NODE_ENV === "production";
+  const isStandaloneProd = process.env.STANDALONE_STRICT_FRAME === "true";
 
-  app.use(express.json({ limit: "5mb" }));
+  app.disable("x-powered-by");
+  app.set("trust proxy", 1);
+
+  // Redirección forzada HTTP -> HTTPS en producción (detrás de proxy inverso)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const proto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+    const host = String(req.headers.host || "");
+    const isLocalHost = host.startsWith("localhost") || host.startsWith("127.0.0.1");
+    if (isProd && proto === "http" && host && !isLocalHost) {
+      return res.redirect(301, `https://${host}${req.originalUrl}`);
+    }
+    next();
+  });
+
+  // Cabeceras globales de seguridad HTTP
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    applySecurityHeaders(req, res, {
+      isStandaloneProd,
+      noStore: req.path.startsWith("/api/"),
+    });
+    next();
+  });
+
+  // Bloquear explícitamente acceso a archivos sensibles o de configuración interna
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const lowerPath = req.path.toLowerCase();
+    if (
+      lowerPath.includes("/.env") ||
+      lowerPath.includes("/.git") ||
+      lowerPath.endsWith(".rules") ||
+      lowerPath.endsWith(".sql") ||
+      lowerPath.endsWith(".map") ||
+      lowerPath === "/firebase-blueprint.json"
+    ) {
+      return res.status(404).end();
+    }
+    next();
+  });
+
+  app.use("/api", express.json({ limit: "256kb" }));
+
+  // CORS estricto para rutas API
+  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+    if (!enforceStrictCors(req, res, req.path)) return;
+    next();
+  });
 
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({ ok: true });
+  });
+
+  // Rate limiting para endpoints de IA
+  app.use("/api/gemini", (req: Request, res: Response, next: NextFunction) => {
+    if (!enforceRateLimit(req, res, req.path)) return;
+    next();
   });
 
   // 1. Evaluar la química molecular interna de una receta
   app.post("/api/gemini/recipe-harmony", async (req: Request, res: Response) => {
     try {
       const { recipeName, categories, ingredients } = req.body || {};
-      const ingList: string[] = Array.isArray(ingredients)
-        ? ingredients.map((i) => String(i).trim()).filter(Boolean).slice(0, 15)
-        : [];
+      const cleanName = sanitizePromptText(recipeName, 120) || "Receta";
+      const cleanCats = sanitizeStringArray(categories, 8, 40);
+      const ingList = sanitizeStringArray(ingredients, 15, 80);
 
       if (ingList.length === 0) {
-        return res.status(400).json({ error: "Se requieren ingredientes para analizar la armonía." });
+        logSecurityEvent("INVALID_PAYLOAD", { endpoint: "/api/gemini/recipe-harmony", ip: getClientIp(req) });
+        return res.status(400).json({ error: "Se requieren ingredientes válidos para analizar la armonía." });
       }
 
       const ai = getAiClient();
-      const catText = Array.isArray(categories) && categories.length > 0 ? categories.join(", ") : "General";
+      const catText = cleanCats.length > 0 ? cleanCats.join(", ") : "General";
       const prompt = `Analiza la armonía y química molecular interna de esta receta gastronómica profesional:
-Nombre de la receta: "${String(recipeName || "Receta")}"
+Nombre de la receta: "${cleanName}"
 Categorías: ${catText}
-Ingredientes del escandallo: ${ingList.join(", ")}.
+Ingredientess del escandallo: ${ingList.join(", ")}.
 
 TU OBJETIVO ES EXPLICAR CIENTÍFICAMENTE POR QUÉ FUNCIONA ESTE PLATO:
 1. Puntuación de Cohesión Molecular (0-100%).
@@ -129,11 +187,8 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
 
       const parsed = JSON.parse(response.text || "{}");
       res.json(parsed);
-    } catch (err: any) {
-      console.error("[/api/gemini/recipe-harmony] Error:", err);
-      res.status(extractStatus(err)).json({
-        error: err?.message || "Error en la llamada a Gemini API",
-      });
+    } catch (err: unknown) {
+      sendSafeServerError(res, "/api/gemini/recipe-harmony", err);
     }
   });
 
@@ -141,12 +196,11 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
   app.post("/api/gemini/mesa-id", async (req: Request, res: Response) => {
     try {
       const { ingredients } = req.body || {};
-      const clean: string[] = Array.isArray(ingredients)
-        ? ingredients.map((i) => String(i).trim()).filter(Boolean)
-        : [];
+      const clean = sanitizeStringArray(ingredients, 15, 80);
 
       if (clean.length < 2) {
-        return res.status(400).json({ error: "Se requieren al menos 2 ingredientes para analizar." });
+        logSecurityEvent("INVALID_PAYLOAD", { endpoint: "/api/gemini/mesa-id", ip: getClientIp(req) });
+        return res.status(400).json({ error: "Se requieren al menos 2 ingredientes válidos para analizar." });
       }
 
       const ai = getAiClient();
@@ -240,11 +294,8 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
 
       const parsed = JSON.parse(response.text || "{}");
       res.json(parsed);
-    } catch (err: any) {
-      console.error("[/api/gemini/mesa-id] Error:", err);
-      res.status(extractStatus(err)).json({
-        error: err?.message || "Error en la llamada a Gemini API",
-      });
+    } catch (err: unknown) {
+      sendSafeServerError(res, "/api/gemini/mesa-id", err);
     }
   });
 
@@ -252,12 +303,11 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
   app.post("/api/gemini/molecular-pairings", async (req: Request, res: Response) => {
     try {
       const { ingredients } = req.body || {};
-      const clean: string[] = Array.isArray(ingredients)
-        ? ingredients.map((i) => String(i).trim()).filter(Boolean)
-        : [];
+      const clean = sanitizeStringArray(ingredients, 15, 80);
 
       if (clean.length === 0) {
-        return res.status(400).json({ error: "Se requieren ingredientes." });
+        logSecurityEvent("INVALID_PAYLOAD", { endpoint: "/api/gemini/molecular-pairings", ip: getClientIp(req) });
+        return res.status(400).json({ error: "Se requieren ingredientes válidos." });
       }
 
       const ai = getAiClient();
@@ -275,11 +325,8 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
 
       const parsed = JSON.parse(response.text || "{}");
       res.json(parsed);
-    } catch (err: any) {
-      console.error("[/api/gemini/molecular-pairings] Error:", err);
-      res.status(extractStatus(err)).json({
-        error: err?.message || "Error en la llamada a Gemini API",
-      });
+    } catch (err: unknown) {
+      sendSafeServerError(res, "/api/gemini/molecular-pairings", err);
     }
   });
 
@@ -287,19 +334,23 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
   app.post("/api/gemini/generate-recipe", async (req: Request, res: Response) => {
     try {
       const { ingredients, vibe, level, goal, constraints } = req.body || {};
-      const ingList: string[] = Array.isArray(ingredients)
-        ? ingredients.map((i) => String(i).trim()).filter(Boolean)
-        : [];
-      const constraintList: string[] = Array.isArray(constraints)
-        ? constraints.map((c) => String(c).trim()).filter(Boolean)
-        : [];
+      const ingList = sanitizeStringArray(ingredients, 15, 80);
+      const constraintList = sanitizeStringArray(constraints, 10, 60);
+      const cleanVibe = sanitizePromptText(vibe, 60) || "Alta Gastronomía";
+      const cleanLevel = sanitizePromptText(level, 40) || "Professional";
+      const cleanGoal = sanitizePromptText(goal, 80) || "Plato principal";
+
+      if (ingList.length === 0) {
+        logSecurityEvent("INVALID_PAYLOAD", { endpoint: "/api/gemini/generate-recipe", ip: getClientIp(req) });
+        return res.status(400).json({ error: "Se requieren ingredientes válidos para generar la receta." });
+      }
 
       const ai = getAiClient();
       const prompt = `Crea una receta culinaria profesional única basada en:
   - Ingredientes: ${ingList.join(", ")}
-  - Estilo/Vibe: ${String(vibe || "Alta Gastronomía")}
-  - Nivel Técnico: ${String(level || "Professional")}
-  - Objetivo: ${String(goal || "Plato principal")}
+  - Estilo/Vibe: ${cleanVibe}
+  - Nivel Técnico: ${cleanLevel}
+  - Objetivo: ${cleanGoal}
   - Restricciones: ${constraintList.join(", ") || "Ninguna"}
   
   La receta debe ser creativa y coherente. RESPONDE SIEMPRE EN JSON con estructura estándar.`;
@@ -316,15 +367,23 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
 
       const parsed = JSON.parse(response.text || "{}");
       res.json(parsed);
-    } catch (err: any) {
-      console.error("[/api/gemini/generate-recipe] Error:", err);
-      res.status(extractStatus(err)).json({
-        error: err?.message || "Error en la llamada a Gemini API",
-      });
+    } catch (err: unknown) {
+      sendSafeServerError(res, "/api/gemini/generate-recipe", err);
     }
   });
 
-  if (process.env.NODE_ENV !== "production") {
+  // Manejador de errores JSON malformados (ej: body > 256kb o sintaxis inválida)
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    if (err?.type === "entity.too.large") {
+      return res.status(413).json({ error: "La solicitud supera el tamaño máximo permitido." });
+    }
+    if (err?.type === "entity.parse.failed") {
+      return res.status(400).json({ error: "Formato JSON inválido." });
+    }
+    return res.status(500).json({ error: "Error interno del servidor." });
+  });
+
+  if (!isProd) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -333,7 +392,7 @@ RESPONDE EXCLUSIVAMENTE EN FORMATO JSON.`;
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, { dotfiles: "deny" }));
     app.use((_req: Request, res: Response) => {
       res.sendFile(path.join(distPath, "index.html"));
     });

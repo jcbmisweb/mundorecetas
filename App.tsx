@@ -40,16 +40,12 @@ import {
   loginWithGoogle,
   logout as firebaseLogout,
   testFirestoreConnection,
-  loginDemoUser,
-  getDemoUser,
   getActiveUser,
   saveActiveUser
 } from './firebase';
 import { 
-  collection, 
   doc, 
   getDoc, 
-  getDocs, 
   setDoc, 
   updateDoc, 
   deleteDoc, 
@@ -59,6 +55,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ShieldAlert, LogOut, Loader2, Server, CheckCircle2, AlertCircle, RefreshCw, X, Database, Wifi, WifiOff, Cloud, CloudOff } from 'lucide-react';
 import { normalizeText, extractDifferenceNote, matchProductInCatalog, reconcileRecipeWithCatalog, reconcileIngredientWithCatalog } from './lib/productUtils';
 import { calculateIngredientCost } from './lib/costUtils';
+import { fetchScopedCollection, subscribeScopedCollection } from './lib/firestoreQueries';
 import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal, seedLocalDatabase, saveProRecipeLocal, deleteProRecipeLocal, seedProRecipesLocal } from './db/dexieDB';
 import { 
   subscribeSyncStatus, 
@@ -276,8 +273,7 @@ function App() {
       const localRecipes = await localDB.recipes.toArray();
       let rLoaded: Recipe[] = [];
       try {
-        const rSnap = await getDocs(collection(db, 'recipes'));
-        rLoaded = rSnap.docs.map(d => ({ id: d.id, ...d.data(), synced: true } as Recipe));
+        rLoaded = await fetchScopedCollection<Recipe>('recipes', appUser, { synced: true });
       } catch (err) {
         console.warn("Firestore recipes getDocs warning (quota limit reached, reading from localDB):", err);
       }
@@ -307,8 +303,7 @@ function App() {
       const localProducts = await localDB.products.toArray();
       let pLoaded: Product[] = [];
       try {
-        const pSnap = await getDocs(collection(db, 'products'));
-        pLoaded = pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+        pLoaded = await fetchScopedCollection<Product>('products', appUser);
       } catch (err) {
         console.warn("Firestore products getDocs warning:", err);
       }
@@ -359,8 +354,7 @@ function App() {
       // 3. Menus
       let mLoaded: MenuPlan[] = [];
       try {
-        const mSnap = await getDocs(collection(db, 'menuPlans'));
-        mLoaded = mSnap.docs.map(d => ({ id: d.id, ...d.data() } as MenuPlan));
+        mLoaded = await fetchScopedCollection<MenuPlan>('menuPlans', appUser);
         if (mLoaded.length > 0) {
           setSavedMenus(mLoaded);
           try { localStorage.setItem('cached_menus', JSON.stringify(mLoaded)); } catch {}
@@ -372,11 +366,9 @@ function App() {
       // 4. Pro Recipes
       let proLoaded: ProRecipe[] = [];
       try {
-        const proSnap = await getDocs(collection(db, 'proRecipes'));
-        proLoaded = proSnap.docs.map(d => ({ id: d.id, ...d.data() } as ProRecipe));
+        proLoaded = await fetchScopedCollection<ProRecipe>('proRecipes', appUser);
         if (proLoaded.length === 0) {
-          const altSnap = await getDocs(collection(db, 'pro_recipes'));
-          proLoaded = altSnap.docs.map(d => ({ id: d.id, ...d.data() } as ProRecipe));
+          proLoaded = await fetchScopedCollection<ProRecipe>('pro_recipes', appUser);
         }
         if (proLoaded.length > 0) {
           setProRecipes(prev => {
@@ -625,28 +617,14 @@ function App() {
     }
   }, [recipes]);
 
-  // Auth Listener (Firebase Auth + Active / Demo User)
+  // Auth Listener (Firebase Auth + Verified Profile Sync)
   useEffect(() => {
-    // 1. Check for Active / Demo User in local storage for instant offline boot
-    const activeUser = getActiveUser();
-    if (activeUser) {
-      setUser({ id: activeUser.uid, email: activeUser.email, displayName: activeUser.displayName });
-      setAppUser(activeUser);
-      if (activeUser.isApproved) {
-        setViewState('DASHBOARD');
-      } else {
-        setViewState('PENDING');
-      }
-      setIsLoading(false);
-    }
-
-    // 2. Listen to Firebase Auth state
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       const safetyTimer = setTimeout(() => {
         setIsLoading(false);
       }, 2500);
 
-      if (fbUser) {
+      if (fbUser && fbUser.emailVerified) {
         const isAdminEmail = isUserAdmin({ email: fbUser.email || '' });
         const userDocRef = doc(db, 'users', fbUser.uid);
         try {
@@ -688,13 +666,15 @@ function App() {
             setViewState(newUser.isApproved ? 'DASHBOARD' : 'PENDING');
           }
         } catch (e) {
-          console.warn("Error fetching user profile from Firestore (using fallback):", e);
-          const fallbackUser: AppUser = {
+          console.warn("Error fetching user profile from Firestore (using safe fallback):", e);
+          const cached = getActiveUser();
+          const matchingCache = cached && cached.uid === fbUser.uid ? cached : null;
+          const fallbackUser: AppUser = matchingCache || {
             uid: fbUser.uid,
             email: fbUser.email || '',
             displayName: fbUser.displayName || 'Chef',
             teacherName: fbUser.displayName || 'Chef',
-            isApproved: true,
+            isApproved: isAdminEmail,
             role: isAdminEmail ? 'admin' : 'user',
             createdAt: Date.now(),
             workspaceId: fbUser.uid
@@ -702,24 +682,17 @@ function App() {
           saveActiveUser(fallbackUser);
           setAppUser(fallbackUser);
           setUser({ id: fallbackUser.uid, email: fallbackUser.email, displayName: fallbackUser.displayName });
-          setViewState('DASHBOARD');
+          setViewState(fallbackUser.isApproved ? 'DASHBOARD' : 'PENDING');
         } finally {
           clearTimeout(safetyTimer);
           setIsLoading(false);
         }
       } else {
         clearTimeout(safetyTimer);
-        const active = getActiveUser();
-        if (active) {
-          setUser({ id: active.uid, email: active.email, displayName: active.displayName });
-          setAppUser(active);
-          setViewState('DASHBOARD');
-        } else {
-          const defaultUser = loginDemoUser('jcbmisweb@gmail.com', 'Juan Codina');
-          setUser({ id: defaultUser.uid, email: defaultUser.email, displayName: defaultUser.displayName });
-          setAppUser(defaultUser);
-          setViewState('DASHBOARD');
-        }
+        saveActiveUser(null);
+        setUser(null);
+        setAppUser(null);
+        setViewState('LANDING');
         setIsLoading(false);
       }
     });
@@ -746,8 +719,7 @@ function App() {
     const unsubRecipes = () => {};
 
     // 2. Products subscription (with localDB merge)
-    const unsubProducts = onSnapshot(collection(db, 'products'), async (snapshot) => {
-      const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+    const unsubProducts = subscribeScopedCollection<Product>('products', async (loaded) => {
       try {
         const localItems = await localDB.products.toArray();
         const map = new Map<string, Product>();
@@ -764,16 +736,15 @@ function App() {
           try { localStorage.setItem('cached_products', JSON.stringify(loaded)); } catch {}
         }
       }
-    }, (err) => console.warn("Firestore products onSnapshot warning:", err));
+    }, (err) => console.warn("Firestore products onSnapshot warning:", err), appUser);
 
     // 3. MenuPlans subscription
-    const unsubMenus = onSnapshot(collection(db, 'menuPlans'), (snapshot) => {
-      const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as MenuPlan));
+    const unsubMenus = subscribeScopedCollection<MenuPlan>('menuPlans', (loaded) => {
       if (loaded.length > 0) {
         setSavedMenus(loaded);
         try { localStorage.setItem('cached_menus', JSON.stringify(loaded)); } catch {}
       }
-    }, (err) => console.warn("Firestore menuPlans onSnapshot warning:", err));
+    }, (err) => console.warn("Firestore menuPlans onSnapshot warning:", err), appUser);
 
     // 4. Settings subscription (con fusión inteligente de categorías y protección de timestamp)
     const targetWorkspace = appUser?.workspaceId || user?.id || 'default';
@@ -824,8 +795,7 @@ function App() {
     }
 
     // 5. ProRecipes subscription
-    const unsubPro = onSnapshot(collection(db, 'proRecipes'), (snapshot) => {
-      const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ProRecipe));
+    const unsubPro = subscribeScopedCollection<ProRecipe>('proRecipes', (loaded) => {
       if (loaded.length > 0) {
         setProRecipes(prev => {
           const remoteMap = new Map(loaded.map(p => [p.id, p]));
@@ -844,7 +814,7 @@ function App() {
       }
     }, (err) => {
       console.warn("Firestore proRecipes onSnapshot warning:", err);
-    });
+    }, appUser);
 
     return () => {
       unsubRecipes();
@@ -863,13 +833,6 @@ function App() {
       console.error("Login failed:", error);
       alert('Error al iniciar sesión con Google: ' + (error.message || 'Error desconocido'));
     }
-  };
-
-  const handleEnterDemo = () => {
-    const demo = loginDemoUser('jcbmisweb@gmail.com', 'Juan Codina');
-    setUser({ id: demo.uid, email: demo.email, displayName: demo.displayName });
-    setAppUser(demo);
-    setViewState('DASHBOARD');
   };
 
   const handleLogout = async () => {
@@ -2057,17 +2020,7 @@ function App() {
           settings={settings} 
           appUser={appUser} 
           onEnter={handleLogin}
-          onEnterDemo={handleEnterDemo}
           onOpenConfig={() => setShowDbModal(true)}
-          onLoginSuccess={(loggedUser) => {
-            setUser({ id: loggedUser.uid, email: loggedUser.email, displayName: loggedUser.displayName });
-            setAppUser(loggedUser);
-            if (loggedUser.isApproved) {
-              setViewState('DASHBOARD');
-            } else {
-              setViewState('PENDING');
-            }
-          }}
         />
       ) : viewState === 'PENDING' ? (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
@@ -2208,8 +2161,8 @@ function App() {
               </ErrorBoundary>
             ) : viewState === 'CALCULATOX' ? (
               <Calculatox onBack={() => setViewState('DASHBOARD')} />
-            ) : viewState === 'USER_MANAGEMENT' ? (
-              <UserManagement recipes={recipes} onBack={() => setViewState('DASHBOARD')} />
+            ) : viewState === 'USER_MANAGEMENT' && isUserAdmin(appUser) ? (
+              <UserManagement recipes={recipes} currentUser={appUser} onBack={() => setViewState('DASHBOARD')} />
             ) : viewState === 'PRO_WORKSHOP' ? (
               <ProWorkshopHub
                 proRecipes={proRecipes}

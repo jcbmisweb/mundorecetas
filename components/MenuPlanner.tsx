@@ -2365,7 +2365,7 @@ export const MenuPlanner: React.FC<MenuPlannerProps> = ({
         {/* FICHAS COCINA, ORDEN SERVICIO, MATRIZ Y HISTÓRICO SE MANTIENEN Y COMPLEMENTAN */}
         {activeTab === 'kitchen_fichas' && (
           <div className="min-h-screen bg-gray-100 print:bg-white p-4 md:p-10">
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style>{`
               @media print {
                 @page { margin: 10mm 10mm 20mm 10mm; }
                 .print-footer {
@@ -2386,7 +2386,7 @@ export const MenuPlanner: React.FC<MenuPlannerProps> = ({
                 .page-number:after { content: "PÁG. " counter(page); }
                 .no-break { break-inside: avoid; }
               }
-            `}} />
+            `}</style>
             <div className="max-w-5xl mx-auto mb-6 flex justify-between items-center no-print">
               <button onClick={() => setActiveTab('planning')} className="flex items-center gap-2 text-slate-600 hover:text-slate-900 font-bold uppercase text-[10px] tracking-widest">
                 <ArrowLeft size={20} />

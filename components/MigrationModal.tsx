@@ -7,6 +7,8 @@ import { localDB, saveRecipeLocal, saveProductLocal, saveMenuPlanLocal } from '.
 import { compressBase64Image } from '../lib/imageUtils';
 import { normalizeVideos, sanitizeVideoUrl } from '../lib/videoUtils';
 import { parseRecipesFromCSV, parseProductsFromCSV } from '../lib/csvParser';
+import { parseFirebaseConfigSnippet, validateUploadedFile } from '../lib/urlUtils';
+import { fetchScopedCollection } from '../lib/firestoreQueries';
 import { 
   X, Database, ArrowRight, Download, Upload, CheckCircle2, 
   AlertTriangle, RefreshCw, Terminal, Copy, Check, FileJson, 
@@ -283,6 +285,16 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const validation = validateUploadedFile(file, {
+      allowedExtensions: ['json', 'csv'],
+      maxSizeBytes: 25 * 1024 * 1024,
+    });
+    if (!validation.valid) {
+      alert(validation.error || 'Archivo no válido.');
+      e.target.value = '';
+      return;
+    }
+
     setSelectedFile(file);
     const reader = new FileReader();
 
@@ -427,8 +439,8 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
     // Obtener IDs existentes en Firestore para no repetir escrituras
     let existingFirestoreRecipeIds = new Set<string>();
     try {
-      const snap = await getDocs(collection(db, 'recipes'));
-      snap.docs.forEach(d => existingFirestoreRecipeIds.add(d.id));
+      const scopedRecipes = await fetchScopedCollection<Recipe>('recipes', appUser);
+      scopedRecipes.forEach(r => existingFirestoreRecipeIds.add(r.id));
     } catch (e: any) {
       if (e?.message?.includes('Quota') || e?.message?.includes('quota') || e?.code === 'resource-exhausted') {
         quotaHit = true;
@@ -518,16 +530,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
 
     let tempApp: any = null;
     try {
-      let configObj: any;
-      try {
-        configObj = JSON.parse(oldFirebaseConfigText);
-      } catch {
-        const cleaned = oldFirebaseConfigText
-          .replace(/(const|let|var)\s+\w+\s*=\s*/, '')
-          .replace(/;\s*$/, '')
-          .trim();
-        configObj = new Function(`return ${cleaned}`)();
-      }
+      const configObj = parseFirebaseConfigSnippet(oldFirebaseConfigText);
 
       if (!configObj || !configObj.apiKey || !configObj.projectId) {
         throw new Error("El objeto de configuración debe contener al menos 'apiKey' y 'projectId'.");
@@ -671,8 +674,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
         let exportRecipes = localRecipes;
         if (exportRecipes.length === 0) {
           try {
-            const snap = await getDocs(collection(db, 'recipes'));
-            exportRecipes = snap.docs.map(d => ({ ...d.data(), id: d.id } as Recipe));
+            exportRecipes = await fetchScopedCollection<Recipe>('recipes', appUser);
           } catch {}
         }
 
@@ -687,8 +689,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
         let exportProds = localProducts;
         if (exportProds.length === 0) {
           try {
-            const snap = await getDocs(collection(db, 'products'));
-            exportProds = snap.docs.map(d => ({ ...d.data(), id: d.id } as Product));
+            exportProds = await fetchScopedCollection<Product>('products', appUser);
           } catch {}
         }
 

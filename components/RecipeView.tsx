@@ -11,6 +11,7 @@ import {
 import { formatScaledQuantity } from "../lib/unitUtils";
 import { transformDriveUrl } from "../lib/googleDriveService";
 import { matchProductInCatalog } from "../lib/productUtils";
+import { sanitizeExternalUrl, sanitizeInfographicSrc } from "../lib/urlUtils";
 import {
   Printer,
   ArrowLeft,
@@ -352,9 +353,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 p-2 md:p-4 print:p-0 print:bg-white font-sans text-slate-900">
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
+      <style>{`
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .page-break { page-break-before: always !important; break-before: page !important; }
@@ -370,9 +369,7 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
             size: A4 portrait;
           }
         }
-      `,
-        }}
-      />
+      `}</style>
       <title>{recipe.name}</title>
       {/* Layout de 2 Columnas con Panel de Control Lateral */}
       <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row gap-6 items-start">
@@ -1154,9 +1151,9 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
                     <span>Chef/Prof: {recipe.creator}</span>
                   </div>
                 )}
-                {recipe.sourceUrl && (
+                {sanitizeExternalUrl(recipe.sourceUrl) && (
                   <a
-                    href={recipe.sourceUrl}
+                    href={sanitizeExternalUrl(recipe.sourceUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 border border-indigo-200 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors no-print"
@@ -1971,14 +1968,9 @@ export const RecipeView: React.FC<RecipeViewProps> = ({
               recipe.takeAwayDetails?.pastryInfographic;
             if (!rawInfographic) return null;
 
-            const infographicSrc = transformDriveUrl(rawInfographic);
-
-            const isImage =
-              infographicSrc.startsWith("data:image") ||
-              infographicSrc.startsWith("http") ||
-              infographicSrc.startsWith("/") ||
-              infographicSrc.includes("googleusercontent.com") ||
-              infographicSrc.includes("drive.google.com");
+            const transformedInfographic = transformDriveUrl(rawInfographic);
+            const { safeSrc: infographicSrc, isSafeImage: isImage } = sanitizeInfographicSrc(transformedInfographic);
+            if (!infographicSrc) return null;
 
             return (
               <div className="page-break max-w-4xl mx-auto my-8 pt-8 border-t-4 border-slate-900 print:border-none print:m-0 print:p-0">

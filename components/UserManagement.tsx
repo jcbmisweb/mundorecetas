@@ -1,37 +1,54 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AppUser, Recipe } from '../types';
+import { AppUser, Recipe, isUserAdmin } from '../types';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { ArrowLeft, UserCheck, UserX, Shield, Trash2, Search, Loader2, BookOpen, Lock, Globe, MessageSquare } from 'lucide-react';
+import { ArrowLeft, UserCheck, UserX, Shield, Trash2, Search, Loader2, Lock, Globe, MessageSquare, ShieldAlert } from 'lucide-react';
 
 interface UserManagementProps {
   recipes: Recipe[];
+  currentUser?: AppUser | null;
   onBack: () => void;
 }
 
-export const UserManagement: React.FC<UserManagementProps> = ({ recipes, onBack }) => {
+export const UserManagement: React.FC<UserManagementProps> = ({ recipes, currentUser, onBack }) => {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const isAdminAuthorized = isUserAdmin(currentUser);
 
   useEffect(() => {
+    if (!isAdminAuthorized) {
+      setLoading(false);
+      return;
+    }
+
     const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
       const list = snapshot.docs.map(d => ({ uid: d.id, ...d.data() } as AppUser));
       setUsers(list);
       setLoading(false);
     }, (err) => {
       console.warn("Firestore fetch users error:", err);
-      const demo = localStorage.getItem('active_app_user');
-      if (demo) {
-        try { setUsers([JSON.parse(demo)]); } catch {}
-      }
       setLoading(false);
     });
 
     return () => unsub();
-  }, []);
+  }, [isAdminAuthorized]);
+
+  if (!isAdminAuthorized) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
+        <ShieldAlert size={48} className="text-rose-500 mb-4" />
+        <h2 className="text-xl font-serif font-bold text-slate-900 mb-2">Acceso Restringido (403)</h2>
+        <p className="text-sm text-slate-600 mb-6">Solo los administradores autorizados pueden acceder a la gestión de usuarios.</p>
+        <button onClick={onBack} className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase tracking-wider">
+          Volver al Panel
+        </button>
+      </div>
+    );
+  }
 
   const toggleApproval = async (user: AppUser) => {
+    if (!isAdminAuthorized) return;
     const newStatus = !user.isApproved;
     setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, isApproved: newStatus } : u));
     try {

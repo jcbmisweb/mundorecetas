@@ -25,9 +25,9 @@ yarn-error.log*
 .eslintcache
 .vite/
 
-# Large temporary assets / chat upload dumps exceeding GitHub API limits
-public/assets/aistudio/*.csv
-public/assets/aistudio/*.png
+# Large temporary assets / personal upload dumps
+public/assets/aistudio/*
+!public/assets/aistudio/.gitkeep
 
 # OS metadata
 .DS_Store

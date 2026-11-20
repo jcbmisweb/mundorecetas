@@ -1,24 +1,40 @@
 import { GoogleGenAI } from "@google/genai";
+import {
+  applySecurityHeaders,
+  enforceStrictCors,
+  enforceRateLimit,
+  sanitizeStringArray,
+  sendSafeServerError,
+  logSecurityEvent,
+  getClientIp,
+} from "../../lib/apiSecurity";
 
 const GEMINI_MODEL = "gemini-4-hydrogen";
 
 export default async function handler(req: any, res: any) {
+  applySecurityHeaders(req, res, { isStandaloneProd: true, noStore: true });
+
+  if (!enforceStrictCors(req, res, "/api/gemini/molecular-pairings")) return;
+
   if (req.method !== "POST") {
+    logSecurityEvent("METHOD_NOT_ALLOWED", { endpoint: "/api/gemini/molecular-pairings", ip: getClientIp(req) });
     return res.status(405).json({ error: "Method not allowed" });
   }
+
+  if (!enforceRateLimit(req, res, "/api/gemini/molecular-pairings")) return;
+
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server." });
+      return res.status(503).json({ error: "Servicio de análisis no disponible temporalmente." });
     }
 
     const { ingredients } = req.body || {};
-    const clean: string[] = Array.isArray(ingredients)
-      ? ingredients.map((i: any) => String(i).trim()).filter(Boolean)
-      : [];
+    const clean = sanitizeStringArray(ingredients, 15, 80);
 
     if (clean.length === 0) {
-      return res.status(400).json({ error: "Se requieren ingredientes." });
+      logSecurityEvent("INVALID_PAYLOAD", { endpoint: "/api/gemini/molecular-pairings", ip: getClientIp(req) });
+      return res.status(400).json({ error: "Se requieren ingredientes válidos." });
     }
 
     const ai = new GoogleGenAI({
@@ -39,7 +55,7 @@ export default async function handler(req: any, res: any) {
     });
 
     return res.status(200).json(JSON.parse(response.text || "{}"));
-  } catch (err: any) {
-    return res.status(500).json({ error: err?.message || "Error en la llamada a Gemini API" });
+  } catch (err: unknown) {
+    return sendSafeServerError(res, "/api/gemini/molecular-pairings", err);
   }
 }

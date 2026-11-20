@@ -42,7 +42,9 @@ export class ErrorBoundary extends Component<Props, State> {
             <span>{this.props.fallbackTitle || 'Se produjo un error visual recuperable'}</span>
           </div>
           <p className="text-xs text-rose-700">
-            {this.state.error?.message || 'Error inesperado al renderizar este componente.'}
+            {(import.meta as any).env?.PROD
+              ? 'Ha ocurrido un error inesperado al cargar esta vista. Pulsa Reintentar para recargar.'
+              : (this.state.error?.message || 'Error inesperado al renderizar este componente.')}
           </p>
           <button
             onClick={this.handleReload}

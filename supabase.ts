@@ -1,9 +1,9 @@
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { Recipe, ProRecipe, Product, MenuPlan, AppSettings, AppUser, WorkspaceInvite, DEFAULT_CATEGORIES, isUserAdmin } from './types';
 
-// Project URL y API Key del proyecto 'recetario-jcb' (Project ID: rzmehjqihufygpsqroqe)
-export const DEFAULT_SUPABASE_URL = 'https://rzmehjqihufygpsqroqe.supabase.co';
-export const DEFAULT_SUPABASE_KEY = 'sb_publishable_QPad3QVRLe6YEdY3mrH_FQ_DtTwrxyc';
+// Credenciales vacías por defecto: deben configurarse vía VITE_SUPABASE_* o en el panel seguro de configuración
+export const DEFAULT_SUPABASE_URL = '';
+export const DEFAULT_SUPABASE_KEY = '';
 
 // Leer credenciales de Vite env o de localStorage (para configuración rápida en UI)
 const getEnvConfig = () => {
@@ -126,40 +126,9 @@ export async function logout() {
   }
 }
 
-// Modo demostración para que el usuario pueda usar la app al instante si aún no ha creado el proyecto en Supabase
-export function loginDemoUser(email = 'jcbmisweb@gmail.com', name = 'Juan Codina'): AppUser {
-  const demoUser: AppUser = {
-    uid: 'admin_jcbmisweb',
-    email,
-    displayName: name,
-    teacherName: name,
-    teacherLogo: 'https://lh3.googleusercontent.com/d/1DkCOqFGdw3PZbyNUnTQNgeaAGjBfv1_e',
-    instituteName: 'IES La Flota',
-    instituteLogo: '',
-    isApproved: true,
-    role: 'admin',
-    createdAt: Date.now(),
-    workspaceId: 'admin_jcbmisweb'
-  };
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('supabase_demo_user', JSON.stringify(demoUser));
-  }
-  return demoUser;
-}
-
-export function getDemoUser(): AppUser | null {
-  if (typeof localStorage !== 'undefined') {
-    const raw = localStorage.getItem('supabase_demo_user');
-    if (raw) {
-      try { return JSON.parse(raw); } catch {}
-    }
-  }
-  return null;
-}
-
 export function saveActiveUser(user: AppUser | null) {
   if (typeof localStorage !== 'undefined') {
-    if (user) {
+    if (user && user.uid) {
       localStorage.setItem('supabase_active_user', JSON.stringify(user));
     } else {
       localStorage.removeItem('supabase_active_user');
@@ -170,61 +139,12 @@ export function saveActiveUser(user: AppUser | null) {
 
 export function getActiveUser(): AppUser | null {
   if (typeof localStorage !== 'undefined') {
-    const raw = localStorage.getItem('supabase_active_user') || localStorage.getItem('supabase_demo_user');
+    const raw = localStorage.getItem('supabase_active_user');
     if (raw) {
       try { return JSON.parse(raw); } catch {}
     }
   }
   return null;
-}
-
-// Iniciar sesión directamente con correo (crea o recupera el usuario en Supabase)
-export async function loginWithCustomEmail(email: string, displayName?: string): Promise<AppUser> {
-  const cleanEmail = email.trim().toLowerCase();
-  const client = getSupabaseClient();
-  const isAdmin = isUserAdmin({ email: cleanEmail });
-  const uid = 'usr_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
-  const name = displayName?.trim() || cleanEmail.split('@')[0];
-
-  let appUser: AppUser = {
-    uid,
-    email: cleanEmail,
-    displayName: name,
-    teacherName: name,
-    teacherLogo: isAdmin ? 'https://lh3.googleusercontent.com/d/1DkCOqFGdw3PZbyNUnTQNgeaAGjBfv1_e' : '',
-    instituteName: 'IES La Flota',
-    instituteLogo: '',
-    isApproved: isAdmin, // Admins auto-aprobados, alumnos/usuarios según configuración
-    role: isAdmin ? 'admin' : 'user',
-    createdAt: Date.now(),
-    workspaceId: uid
-  };
-
-  if (client) {
-    try {
-      const { data: existing } = await client
-        .from('users')
-        .select('*')
-        .eq('email', cleanEmail)
-        .maybeSingle();
-
-      if (existing) {
-        appUser = rowToUser(existing);
-        if (isAdmin && (!appUser.isApproved || appUser.role !== 'admin')) {
-          appUser.isApproved = true;
-          appUser.role = 'admin';
-          await client.from('users').update(userToRow(appUser)).eq('id', existing.id);
-        }
-      } else {
-        await client.from('users').upsert(userToRow(appUser));
-      }
-    } catch (err) {
-      console.warn("Error syncing user with Supabase table:", err);
-    }
-  }
-
-  saveActiveUser(appUser);
-  return appUser;
 }
 
 // ============================================================================

@@ -9,6 +9,8 @@ import {
   Layers, HardDrive
 } from 'lucide-react';
 import { compressImage } from '../lib/imageUtils';
+import { validateUploadedFile, ALLOWED_IMAGE_MIME_TYPES } from '../lib/urlUtils';
+import { fetchScopedCollection } from '../lib/firestoreQueries';
 import { db, testFirestoreConnection } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
@@ -94,6 +96,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'teacherLogo' | 'instituteLogo') => {
     const file = e.target.files?.[0];
     if (file) {
+      const check = validateUploadedFile(file, {
+        allowedMimeTypes: ALLOWED_IMAGE_MIME_TYPES,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+        maxSizeBytes: 10 * 1024 * 1024,
+      });
+      if (!check.valid) {
+        alert(check.error || 'Formato de imagen no válido.');
+        e.target.value = '';
+        return;
+      }
       try {
         const compressed = await compressImage(file, 400, 400);
         setLocalUser(prev => ({ ...prev, [field]: compressed }));
@@ -151,9 +163,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     if (backupOptions.recipes) {
       try {
-        const snapshot = await getDocs(collection(db, 'recipes'));
-        if (!snapshot.empty) {
-          const allDbRecipes = snapshot.docs.map(d => d.data() as Recipe);
+        const allDbRecipes = await fetchScopedCollection<Recipe>('recipes', appUser);
+        if (allDbRecipes.length > 0) {
           exportRecipes = isActuallyAdmin 
             ? allDbRecipes 
             : allDbRecipes.filter(r => r.workspaceId === appUser?.workspaceId || r.isPublic);
@@ -905,6 +916,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
+                        const check = validateUploadedFile(file, {
+                          allowedExtensions: ['json'],
+                          maxSizeBytes: 25 * 1024 * 1024,
+                        });
+                        if (!check.valid) {
+                          alert(check.error || 'Archivo JSON no válido.');
+                          e.target.value = '';
+                          return;
+                        }
                         const reader = new FileReader();
                         reader.onload = (event) => {
                           try {

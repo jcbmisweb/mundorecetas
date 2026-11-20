@@ -2,29 +2,43 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "User profile and access status",
+      "description": "User profile, role and access status",
       "type": "object",
       "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string" },
-        "displayName": { "type": "string" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "photoUrl": { "type": "string", "maxLength": 2048 },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "teacherLogo": { "type": "string", "maxLength": 300000 },
+        "instituteName": { "type": "string", "maxLength": 160 },
+        "instituteLogo": { "type": "string", "maxLength": 300000 },
         "isApproved": { "type": "boolean" },
         "role": { "type": "string", "enum": ["admin", "user"] },
-        "createdAt": { "type": "number" }
+        "createdAt": { "type": "number" },
+        "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "requestMessage": { "type": "string", "maxLength": 500 }
       },
-      "required": ["uid", "email", "isApproved", "role"]
+      "required": ["uid", "email", "isApproved", "role", "workspaceId"]
     },
     "Product": {
       "title": "Product",
-      "description": "Product in the database",
+      "description": "Product in the master ingredient database",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "allergens": { "type": "array", "items": { "type": "string" } },
-        "category": { "type": "string" },
-        "unit": { "type": "string" },
-        "pricePerUnit": { "type": "number" }
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "allergens": { "type": "array" },
+        "category": { "type": "string", "maxLength": 100 },
+        "unit": { "type": "string", "maxLength": 30 },
+        "pricePerUnit": { "type": "number" },
+        "weightPerUnit": { "type": "number" },
+        "wastePercentage": { "type": "number" },
+        "supplier": { "type": "string", "maxLength": 160 },
+        "status": { "type": "string", "enum": ["approved", "pending"] },
+        "requestedBy": { "type": "string", "maxLength": 128 },
+        "synced": { "type": "boolean" },
+        "lastModified": { "type": "number" }
       },
       "required": ["id", "name", "unit", "pricePerUnit"]
     },
@@ -33,109 +47,206 @@
       "description": "Technical recipe sheet",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "category": { "type": "string" },
-        "photo": { "type": "string" },
-        "creator": { "type": "string" },
-        "sourceUrl": { "type": "string" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "category": { "type": "string", "maxLength": 120 },
+        "categories": { "type": "array" },
+        "photo": { "type": "string", "maxLength": 900000 },
+        "photoLayout": { "type": "string", "enum": ["classic", "banner", "auto"] },
+        "creator": { "type": "string", "maxLength": 160 },
+        "creatorLogo": { "type": "string", "maxLength": 300000 },
+        "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "isPublic": { "type": "boolean" },
+        "originalAuthor": { "type": "string", "maxLength": 160 },
+        "sourceUrl": { "type": "string", "maxLength": 2048 },
+        "videos": { "type": "array" },
+        "videoUrl": { "type": "string", "maxLength": 2048 },
         "yieldQuantity": { "type": "number" },
-        "yieldUnit": { "type": "string" },
+        "yieldUnit": { "type": "string", "maxLength": 40 },
         "subRecipes": { "type": "array" },
-        "platingInstructions": { "type": "string" },
+        "platingInstructions": { "type": "string", "maxLength": 10000 },
+        "presentation": { "type": "string", "maxLength": 10000 },
+        "importantNotes": { "type": "string", "maxLength": 5000 },
         "serviceDetails": { "type": "object" },
-        "extraAllergens": { "type": "array", "items": { "type": "string" } },
+        "extraAllergens": { "type": "array" },
+        "minimalistCard": { "type": "object" },
+        "takeAwayDetails": { "type": "object" },
+        "recipeType": { "type": "string", "enum": ["normal", "takeaway", "eventos", "pastry"] },
+        "pastryInfographic": { "type": "string", "maxLength": 900000 },
+        "infographicUrl": { "type": "string", "maxLength": 2048 },
+        "linkedRecipeIds": { "type": "array" },
         "isVerified": { "type": "boolean" },
         "verificationStatus": { "type": "string", "enum": ["ok", "fail"] },
-        "verificationNotes": { "type": "string" },
+        "verificationNotes": { "type": "string", "maxLength": 5000 },
         "verifiedAt": { "type": "number" },
         "lastModified": { "type": "number" },
-        "totalCost": { "type": "number" }
+        "createdAt": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "synced": { "type": "boolean" }
       },
-      "required": ["id", "name", "category", "creator", "lastModified"]
+      "required": ["id", "name", "workspaceId", "lastModified"]
+    },
+    "ProRecipe": {
+      "title": "ProRecipe",
+      "description": "High gastronomy 5-level technical sheet for R&D workshop",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "code": { "type": "string", "maxLength": 64 },
+        "version": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["development", "validated", "in_service", "archived"] },
+        "useLevel": { "type": "string", "enum": ["basic", "advanced"] },
+        "responsible": { "type": "string", "maxLength": 160 },
+        "workspaceId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" },
+        "lastModified": { "type": "number" },
+        "synced": { "type": "boolean" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "technicalName": { "type": "string", "maxLength": 250 },
+        "category": { "type": "string", "maxLength": 120 },
+        "targetPax": { "type": "number" },
+        "concept": { "type": "string", "maxLength": 5000 },
+        "starProduct": { "type": "string", "maxLength": 1000 },
+        "storytelling": { "type": "string", "maxLength": 5000 },
+        "creatorLogo": { "type": "string", "maxLength": 300000 },
+        "chefNotes": { "type": "string", "maxLength": 5000 },
+        "heroPhoto": { "type": "string", "maxLength": 900000 },
+        "sketchPhoto": { "type": "string", "maxLength": 900000 },
+        "sensoryProfile": { "type": "object" },
+        "components": { "type": "array" },
+        "plating": { "type": "object" },
+        "qualityControl": { "type": "object" },
+        "rubricEvaluation": { "type": "object" },
+        "traceability": { "type": "object" },
+        "pccPlan": { "type": "array" }
+      },
+      "required": ["id", "name", "status", "lastModified"]
     },
     "MenuPlan": {
       "title": "MenuPlan",
-      "description": "A planned menu",
+      "description": "A planned service menu",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "date": { "type": "string" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "date": { "type": "string", "maxLength": 64 },
         "pax": { "type": "number" },
-        "recipeIds": { "type": "array", "items": { "type": "string" } },
-        "lastModified": { "type": "number" }
+        "recipeIds": { "type": "array" },
+        "lastModified": { "type": "number" },
+        "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "recipeRoles": { "type": "object" },
+        "dishExtraIngredients": { "type": "object" },
+        "dishApprovals": { "type": "object" },
+        "workSchedule": { "type": "array" },
+        "groupCount": { "type": "number" },
+        "dishGroupAssignments": { "type": "object" },
+        "groupNotes": { "type": "object" },
+        "workOrderAdvanceNotes": { "type": "object" },
+        "customMenuRoles": { "type": "array" },
+        "dishIngredientOverrides": { "type": "object" },
+        "kitchenChecklist": { "type": "object" },
+        "serviceDetailsOverrides": { "type": "object" },
+        "generalExtraItems": { "type": "array" },
+        "ignoredPurchaseItems": { "type": "array" },
+        "synced": { "type": "boolean" }
       },
-      "required": ["id", "title", "date", "pax", "recipeIds", "lastModified"]
+      "required": ["id", "title", "date", "pax", "recipeIds", "lastModified", "workspaceId"]
     },
     "AppSettings": {
       "title": "AppSettings",
-      "description": "Global application settings",
+      "description": "Global or workspace application settings",
       "type": "object",
       "properties": {
-        "teacherName": { "type": "string" },
-        "instituteName": { "type": "string" },
-        "teacherLogo": { "type": "string" },
-        "instituteLogo": { "type": "string" },
-        "categories": { "type": "array", "items": { "type": "string" } }
+        "instituteName": { "type": "string", "maxLength": 160 },
+        "instituteLogo": { "type": "string", "maxLength": 300000 },
+        "teacherName": { "type": "string", "maxLength": 160 },
+        "teacherLogo": { "type": "string", "maxLength": 300000 },
+        "categories": { "type": "array" },
+        "categoryConfigs": { "type": "array" },
+        "workSchedule": { "type": "array" },
+        "defaultGroupCount": { "type": "number" },
+        "menuRoles": { "type": "array" },
+        "lastModified": { "type": "number" }
       },
-      "required": ["teacherName", "instituteName", "categories"]
+      "required": ["instituteName", "categories"]
     },
     "WorkspaceSettings": {
       "title": "WorkspaceSettings",
       "description": "Settings specific to a workspace",
       "type": "object",
       "properties": {
-        "workspaceId": { "type": "string" },
-        "categories": { "type": "array", "items": { "type": "string" } },
-        "categoryConfigs": { "type": "array", "items": { "type": "object" } }
+        "workspaceId": { "type": "string", "maxLength": 128 },
+        "categories": { "type": "array" },
+        "categoryConfigs": { "type": "array" }
       },
       "required": ["workspaceId", "categories"]
     },
-    "ProRecipe": {
-      "title": "ProRecipe",
-      "description": "High gastronomy 5-level technical sheet for R&D and 3-star Michelin workshop",
+    "WorkspaceInvite": {
+      "title": "WorkspaceInvite",
+      "description": "Team workspace invitation",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "code": { "type": "string" },
-        "version": { "type": "string" },
-        "name": { "type": "string" },
-        "status": { "type": "string", "enum": ["development", "validated", "in_service", "archived"] },
-        "responsible": { "type": "string" },
-        "lastModified": { "type": "number" }
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "inviterName": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "number" }
       },
-      "required": ["id", "code", "name", "version", "status", "lastModified"]
+      "required": ["email", "workspaceId", "createdAt"]
+    },
+    "ConnectionTest": {
+      "title": "ConnectionTest",
+      "description": "Firestore connectivity diagnostic probe",
+      "type": "object",
+      "properties": {
+        "ok": { "type": "boolean" }
+      }
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
-      "description": "User access control and profiles"
+      "description": "User access control and profiles (PII protected)"
     },
     "/products/{productId}": {
       "schema": "Product",
-      "description": "Shared product database"
+      "description": "Master product database"
     },
     "/recipes/{recipeId}": {
       "schema": "Recipe",
-      "description": "Shared recipe technical sheets"
+      "description": "Academic and production technical recipe sheets"
     },
     "/proRecipes/{proRecipeId}": {
       "schema": "ProRecipe",
       "description": "Haute cuisine R&D workshop technical sheets"
     },
+    "/pro_recipes/{proRecipeId}": {
+      "schema": "ProRecipe",
+      "description": "Haute cuisine R&D workshop technical sheets (snake_case mirror)"
+    },
     "/menuPlans/{menuPlanId}": {
       "schema": "MenuPlan",
-      "description": "Shared menu plans"
+      "description": "Planned menus and work orders"
     },
-    "/settings/global": {
+    "/menu_plans/{menuPlanId}": {
+      "schema": "MenuPlan",
+      "description": "Planned menus and work orders (snake_case mirror)"
+    },
+    "/settings/{docId}": {
       "schema": "AppSettings",
-      "description": "Global settings for the app"
+      "description": "Global and per-workspace application settings"
     },
     "/workspace_settings/{workspaceId}": {
       "schema": "WorkspaceSettings",
       "description": "Settings specific to a workspace"
+    },
+    "/workspace_invites/{inviteId}": {
+      "schema": "WorkspaceInvite",
+      "description": "Workspace collaboration invitations"
+    },
+    "/test/{docId}": {
+      "schema": "ConnectionTest",
+      "description": "Diagnostic connectivity test document"
     }
   }
 }

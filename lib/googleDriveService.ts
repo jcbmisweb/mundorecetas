@@ -1,6 +1,7 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
+import { sanitizeExternalUrl, validateUploadedFile, ALLOWED_DOC_MIME_TYPES } from './urlUtils';
 
 // Reuse or initialize Firebase app
 const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
@@ -60,20 +61,26 @@ export const getDriveAccessToken = (): string | null => {
 export const transformDriveUrl = (url?: string): string => {
   if (!url) return '';
   const trimmed = url.trim();
-
-  if (trimmed.includes('lh3.googleusercontent.com') || trimmed.includes('drive.google.com/uc?')) {
+  if (trimmed.startsWith('data:image/')) {
     return trimmed;
   }
 
-  const fileIdMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
-                      trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  const safeHttp = sanitizeExternalUrl(trimmed);
+  if (!safeHttp) return '';
+
+  if (safeHttp.includes('lh3.googleusercontent.com') || safeHttp.includes('drive.google.com/uc?')) {
+    return safeHttp;
+  }
+
+  const fileIdMatch = safeHttp.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+                      safeHttp.match(/[?&]id=([a-zA-Z0-9_-]+)/);
 
   if (fileIdMatch && fileIdMatch[1]) {
     const fileId = fileIdMatch[1];
     return `https://lh3.googleusercontent.com/d/${fileId}`;
   }
 
-  return trimmed;
+  return safeHttp;
 };
 
 export const sanitizeFileName = (str: string): string => {
@@ -93,6 +100,15 @@ export const uploadFileToDrive = async (
   folderId: string = GOOGLE_DRIVE_FOLDER_ID,
   customName?: string
 ): Promise<{ fileId: string; webViewLink: string; directUrl: string }> => {
+  const check = validateUploadedFile(file, {
+    allowedMimeTypes: ALLOWED_DOC_MIME_TYPES,
+    allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'],
+    maxSizeBytes: 25 * 1024 * 1024,
+  });
+  if (!check.valid) {
+    throw new Error(check.error || 'Archivo no permitido para subir a Google Drive.');
+  }
+
   let token = cachedAccessToken;
 
   if (!token) {

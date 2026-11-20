@@ -3,15 +3,37 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ------------------------------------------------------------------------
-    // FUNCIONES AUXILIARES Y DE AUTENTICACIÓN
+    // DEFAULT DENY CATCH-ALL (GLOBAL SAFETY NET)
     // ------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
+    // ------------------------------------------------------------------------
+    // GLOBAL HARDENED PRIMITIVES & IDENTITY HELPERS
+    // ------------------------------------------------------------------------
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
     function isAdminEmail(email) {
-      return email in [
+      return email is string && email in [
         "jcbmisweb@gmail.com",
         "jcbrecetas@gmail.com",
         "jcbprofesor@gmail.com",
@@ -20,175 +42,444 @@ service cloud.firestore {
       ];
     }
 
+    // Pure token-based admin check (safe in list queries - no get()/exists() cost)
+    function isAdminToken() {
+      return isEmailVerified() && request.auth.token.email != null && isAdminEmail(request.auth.token.email);
+    }
+
+    // Full admin check for single-document operations (token email OR verified admin role doc)
+    function isAdmin() {
+      return isAdminToken() || (
+        isEmailVerified() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isApproved', false) == true
+      );
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isUserApproved() {
-      return isSignedIn() && (
-        (request.auth.token.email != null && isAdminEmail(request.auth.token.email)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().get('isApproved', false) == true)
-      );
-    }
-
-    function isAdmin() {
-      return isSignedIn() && (
-        (request.auth.token.email != null && isAdminEmail(request.auth.token.email)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().get('role', '') == 'admin')
+      return isAdmin() || (
+        isEmailVerified() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getUserData().get('isApproved', false) == true
       );
     }
 
     function isWorkspaceMember(workspaceId) {
-      return isSignedIn() && (
-        workspaceId == request.auth.uid ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().get('workspaceId', '') == workspaceId) ||
-        isAdmin()
+      return isAdmin() || (
+        isUserApproved() && (
+          workspaceId == request.auth.uid ||
+          getUserData().get('workspaceId', '') == workspaceId
+        )
       );
     }
 
     // ------------------------------------------------------------------------
-    // REGIONAL DEFAULT DENY CATCH-ALL
+    // ENTITY VALIDATION BLUEPRINTS
     // ------------------------------------------------------------------------
-    match /{document=**} {
-      allow read, write: if false;
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'isApproved', 'role', 'workspaceId']) &&
+        data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'photoUrl', 'teacherName', 'teacherLogo',
+          'instituteName', 'instituteLogo', 'isApproved', 'role', 'createdAt',
+          'workspaceId', 'requestMessage'
+        ]) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.isApproved is bool &&
+        data.role in ['admin', 'user'] &&
+        isValidId(data.workspaceId) &&
+        (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 120)) &&
+        (!('photoUrl' in data) || data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() <= 2048)) &&
+        (!('teacherName' in data) || data.teacherName == null || (data.teacherName is string && data.teacherName.size() <= 120)) &&
+        (!('teacherLogo' in data) || data.teacherLogo == null || (data.teacherLogo is string && data.teacherLogo.size() <= 350000)) &&
+        (!('instituteName' in data) || data.instituteName == null || (data.instituteName is string && data.instituteName.size() <= 160)) &&
+        (!('instituteLogo' in data) || data.instituteLogo == null || (data.instituteLogo is string && data.instituteLogo.size() <= 350000)) &&
+        (!('createdAt' in data) || data.createdAt == null || (data.createdAt is number)) &&
+        (!('requestMessage' in data) || data.requestMessage == null || (data.requestMessage is string && data.requestMessage.size() <= 500));
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['id', 'name', 'unit', 'pricePerUnit']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'allergens', 'category', 'unit', 'pricePerUnit',
+          'weightPerUnit', 'wastePercentage', 'supplier', 'status',
+          'requestedBy', 'synced', 'lastModified'
+        ]) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+        data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 30 &&
+        data.pricePerUnit is number && data.pricePerUnit >= 0 &&
+        (!('allergens' in data) || (data.allergens is list && data.allergens.size() <= 20)) &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 100)) &&
+        (!('weightPerUnit' in data) || data.weightPerUnit == null || data.weightPerUnit is number) &&
+        (!('wastePercentage' in data) || data.wastePercentage == null || data.wastePercentage is number) &&
+        (!('supplier' in data) || data.supplier == null || (data.supplier is string && data.supplier.size() <= 160)) &&
+        (!('status' in data) || data.status in ['approved', 'pending']) &&
+        (!('requestedBy' in data) || data.requestedBy == null || (data.requestedBy is string && data.requestedBy.size() <= 128)) &&
+        (!('synced' in data) || data.synced is bool) &&
+        (!('lastModified' in data) || data.lastModified is number);
+    }
+
+    function isValidRecipe(data) {
+      return data.keys().hasAll(['id', 'name', 'workspaceId', 'lastModified']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'category', 'categories', 'photo', 'photoLayout',
+          'creator', 'creatorLogo', 'workspaceId', 'isPublic', 'originalAuthor',
+          'sourceUrl', 'videos', 'videoUrl', 'yieldQuantity', 'yieldUnit',
+          'subRecipes', 'platingInstructions', 'presentation', 'importantNotes',
+          'serviceDetails', 'extraAllergens', 'minimalistCard', 'takeAwayDetails',
+          'recipeType', 'pastryInfographic', 'infographicUrl', 'linkedRecipeIds',
+          'isVerified', 'verificationStatus', 'verificationNotes', 'verifiedAt',
+          'lastModified', 'createdAt', 'totalCost', 'synced'
+        ]) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 250 &&
+        isValidId(data.workspaceId) &&
+        data.lastModified is number &&
+        (!('category' in data) || data.category == null || (data.category is string && data.category.size() <= 120)) &&
+        (!('categories' in data) || data.categories == null || (data.categories is list && data.categories.size() <= 30)) &&
+        (!('photo' in data) || data.photo == null || (data.photo is string && data.photo.size() <= 900000)) &&
+        (!('photoLayout' in data) || data.photoLayout == null || data.photoLayout in ['classic', 'banner', 'auto']) &&
+        (!('creator' in data) || data.creator == null || (data.creator is string && data.creator.size() <= 160)) &&
+        (!('creatorLogo' in data) || data.creatorLogo == null || (data.creatorLogo is string && data.creatorLogo.size() <= 350000)) &&
+        (!('isPublic' in data) || data.isPublic == null || data.isPublic is bool) &&
+        (!('originalAuthor' in data) || data.originalAuthor == null || (data.originalAuthor is string && data.originalAuthor.size() <= 160)) &&
+        (!('sourceUrl' in data) || data.sourceUrl == null || (data.sourceUrl is string && data.sourceUrl.size() <= 2048)) &&
+        (!('videos' in data) || data.videos == null || (data.videos is list && data.videos.size() <= 30)) &&
+        (!('videoUrl' in data) || data.videoUrl == null || (data.videoUrl is string && data.videoUrl.size() <= 2048)) &&
+        (!('yieldQuantity' in data) || data.yieldQuantity == null || data.yieldQuantity is number) &&
+        (!('yieldUnit' in data) || data.yieldUnit == null || (data.yieldUnit is string && data.yieldUnit.size() <= 40)) &&
+        (!('subRecipes' in data) || data.subRecipes == null || (data.subRecipes is list && data.subRecipes.size() <= 40)) &&
+        (!('platingInstructions' in data) || data.platingInstructions == null || (data.platingInstructions is string && data.platingInstructions.size() <= 15000)) &&
+        (!('presentation' in data) || data.presentation == null || (data.presentation is string && data.presentation.size() <= 15000)) &&
+        (!('importantNotes' in data) || data.importantNotes == null || (data.importantNotes is string && data.importantNotes.size() <= 8000)) &&
+        (!('serviceDetails' in data) || data.serviceDetails == null || data.serviceDetails is map) &&
+        (!('extraAllergens' in data) || data.extraAllergens == null || (data.extraAllergens is list && data.extraAllergens.size() <= 20)) &&
+        (!('minimalistCard' in data) || data.minimalistCard == null || data.minimalistCard is map) &&
+        (!('takeAwayDetails' in data) || data.takeAwayDetails == null || data.takeAwayDetails is map) &&
+        (!('recipeType' in data) || data.recipeType == null || data.recipeType in ['normal', 'takeaway', 'eventos', 'pastry']) &&
+        (!('pastryInfographic' in data) || data.pastryInfographic == null || (data.pastryInfographic is string && data.pastryInfographic.size() <= 900000)) &&
+        (!('infographicUrl' in data) || data.infographicUrl == null || (data.infographicUrl is string && data.infographicUrl.size() <= 2048)) &&
+        (!('linkedRecipeIds' in data) || data.linkedRecipeIds == null || (data.linkedRecipeIds is list && data.linkedRecipeIds.size() <= 50)) &&
+        (!('isVerified' in data) || data.isVerified == null || data.isVerified is bool) &&
+        (!('verificationStatus' in data) || data.verificationStatus == null || data.verificationStatus in ['ok', 'fail']) &&
+        (!('verificationNotes' in data) || data.verificationNotes == null || (data.verificationNotes is string && data.verificationNotes.size() <= 5000)) &&
+        (!('verifiedAt' in data) || data.verifiedAt == null || data.verifiedAt is number) &&
+        (!('createdAt' in data) || data.createdAt == null || data.createdAt is number) &&
+        (!('totalCost' in data) || data.totalCost == null || data.totalCost is number) &&
+        (!('synced' in data) || data.synced == null || data.synced is bool);
+    }
+
+    function isValidProRecipe(data) {
+      return data.keys().hasAll(['id', 'name', 'status', 'lastModified']) &&
+        data.keys().hasOnly([
+          'id', 'code', 'version', 'status', 'useLevel', 'responsible', 'workspaceId',
+          'createdAt', 'lastModified', 'synced', 'name', 'technicalName', 'category',
+          'targetPax', 'concept', 'starProduct', 'storytelling', 'creatorLogo',
+          'chefNotes', 'heroPhoto', 'sketchPhoto', 'sensoryProfile', 'components',
+          'plating', 'qualityControl', 'rubricEvaluation', 'traceability', 'pccPlan'
+        ]) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 250 &&
+        data.status in ['development', 'validated', 'in_service', 'archived'] &&
+        data.lastModified is number &&
+        (!('workspaceId' in data) || (data.workspaceId is string && data.workspaceId.size() <= 128)) &&
+        (!('components' in data) || (data.components is list && data.components.size() <= 50)) &&
+        (!('pccPlan' in data) || (data.pccPlan is list && data.pccPlan.size() <= 30));
+    }
+
+    function isValidMenuPlan(data) {
+      return data.keys().hasAll(['id', 'title', 'date', 'pax', 'recipeIds', 'lastModified', 'workspaceId']) &&
+        data.keys().hasOnly([
+          'id', 'title', 'date', 'pax', 'recipeIds', 'lastModified', 'workspaceId',
+          'recipeRoles', 'dishExtraIngredients', 'dishApprovals', 'workSchedule',
+          'groupCount', 'dishGroupAssignments', 'groupNotes', 'workOrderAdvanceNotes',
+          'customMenuRoles', 'dishIngredientOverrides', 'kitchenChecklist',
+          'serviceDetailsOverrides', 'generalExtraItems', 'ignoredPurchaseItems', 'synced'
+        ]) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.date is string && data.date.size() <= 64 &&
+        data.pax is number && data.pax >= 1 && data.pax <= 10000 &&
+        data.recipeIds is list && data.recipeIds.size() <= 100 &&
+        data.lastModified is number &&
+        isValidId(data.workspaceId);
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll(['instituteName', 'categories']) &&
+        data.keys().hasOnly([
+          'instituteName', 'instituteLogo', 'teacherName', 'teacherLogo',
+          'categories', 'categoryConfigs', 'workSchedule', 'defaultGroupCount',
+          'menuRoles', 'lastModified'
+        ]) &&
+        data.instituteName is string && data.instituteName.size() <= 160 &&
+        data.categories is list && data.categories.size() <= 100 &&
+        (!('instituteLogo' in data) || data.instituteLogo == null || (data.instituteLogo is string && data.instituteLogo.size() <= 350000)) &&
+        (!('teacherLogo' in data) || data.teacherLogo == null || (data.teacherLogo is string && data.teacherLogo.size() <= 350000));
+    }
+
+    function isValidWorkspaceSettings(data) {
+      return data.keys().hasAll(['workspaceId', 'categories']) &&
+        data.keys().hasOnly(['workspaceId', 'categories', 'categoryConfigs']) &&
+        isValidId(data.workspaceId) &&
+        data.categories is list && data.categories.size() <= 100;
+    }
+
+    function isValidWorkspaceInvite(data) {
+      return data.keys().hasAll(['email', 'workspaceId', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'email', 'workspaceId', 'inviterName', 'createdAt']) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        isValidId(data.workspaceId) &&
+        data.createdAt is number;
     }
 
     // ------------------------------------------------------------------------
-    // COLECCIÓN: /users/{userId}
-    // Protege perfiles de usuario y evita autoconcesión de rol admin o isApproved
+    // /users/{userId} - PII STRICTLY ISOLATED (Owner or Admin only)
     // ------------------------------------------------------------------------
     match /users/{userId} {
-      allow read: if isSignedIn();
-
-      allow create: if isSignedIn() && (
+      allow get: if isEmailVerified() && isValidId(userId) && (
         request.auth.uid == userId || isAdmin()
-      ) && (
-        // Si no es un email de admin explícito, no puede auto-otorgarse rol admin ni isApproved=true
-        isAdmin() || (
-          request.resource.data.get('role', 'user') != 'admin' &&
-          request.resource.data.get('isApproved', false) == false
-        ) || (
-          request.auth.token.email != null && isAdminEmail(request.auth.token.email)
-        )
       );
+      allow list: if isAdminToken();
 
-      allow update: if isSignedIn() && (
+      allow create: if isEmailVerified() && isValidId(userId) && isValidUser(incoming()) && (
         isAdmin() || (
           request.auth.uid == userId &&
-          // Un usuario común no puede cambiar su propio rol o estado de aprobación
-          request.resource.data.get('role', resource.data.get('role', 'user')) == resource.data.get('role', 'user') &&
-          request.resource.data.get('isApproved', resource.data.get('isApproved', false)) == resource.data.get('isApproved', false)
+          incoming().uid == request.auth.uid &&
+          incoming().workspaceId == request.auth.uid &&
+          incoming().role == 'user' &&
+          incoming().isApproved == false
         )
       );
 
-      allow delete: if isAdmin();
+      allow update: if isEmailVerified() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() || (
+          request.auth.uid == userId &&
+          incoming().uid == existing().uid &&
+          incoming().workspaceId == existing().workspaceId &&
+          incoming().role == existing().role &&
+          incoming().isApproved == existing().isApproved &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'photoUrl', 'teacherName', 'teacherLogo',
+            'instituteName', 'instituteLogo', 'requestMessage'
+          ])
+        )
+      );
+
+      allow delete: if isAdmin() || (isEmailVerified() && isValidId(userId) && request.auth.uid == userId);
     }
 
     // ------------------------------------------------------------------------
-    // COLECCIÓN: /recipes/{recipeId}
-    // Fichas técnicas académicas
+    // /recipes/{recipeId} - Auth Required, Workspace / Public Scoped
     // ------------------------------------------------------------------------
     match /recipes/{recipeId} {
-      allow read: if true;
+      allow get: if isEmailVerified() && isValidId(recipeId) && (
+        isAdmin() ||
+        existing().get('isPublic', false) == true ||
+        isWorkspaceMember(existing().get('workspaceId', ''))
+      );
+      allow list: if isEmailVerified() && (
+        isAdminToken() ||
+        resource.data.isPublic == true ||
+        resource.data.workspaceId == request.auth.uid
+      );
 
-      allow create, update: if request.resource.data.get('name', '').size() > 0;
+      allow create: if isUserApproved() && isValidId(recipeId) && isValidRecipe(incoming()) && (
+        isAdmin() || (
+          isWorkspaceMember(incoming().workspaceId) &&
+          incoming().get('isVerified', false) == false
+        )
+      );
 
-      allow delete: if isSignedIn() && isAdmin();
+      allow update: if isUserApproved() && isValidId(recipeId) && isValidRecipe(incoming()) && (
+        isAdmin() || (
+          isWorkspaceMember(existing().get('workspaceId', '')) &&
+          incoming().workspaceId == existing().workspaceId &&
+          incoming().get('isVerified', existing().get('isVerified', false)) == existing().get('isVerified', false) &&
+          incoming().get('verificationStatus', null) == existing().get('verificationStatus', null) &&
+          incoming().get('verificationNotes', null) == existing().get('verificationNotes', null)
+        )
+      );
+
+      allow delete: if isValidId(recipeId) && (
+        isAdmin() || (isUserApproved() && isWorkspaceMember(existing().get('workspaceId', '')))
+      );
     }
 
     // ------------------------------------------------------------------------
-    // COLECCIONES: /proRecipes/{proRecipeId} y /pro_recipes/{proRecipeId}
-    // Taller I+D Profesional (5 niveles)
+    // /proRecipes/{proRecipeId} & /pro_recipes/{proRecipeId}
     // ------------------------------------------------------------------------
     match /proRecipes/{proRecipeId} {
-      allow read: if true;
-
-      allow create, update: if request.resource.data.get('name', '').size() > 0;
-
-      allow delete: if isSignedIn() && isAdmin();
+      allow get: if isEmailVerified() && isValidId(proRecipeId) && (
+        isAdmin() || isWorkspaceMember(existing().get('workspaceId', ''))
+      );
+      allow list: if isEmailVerified() && (
+        isAdminToken() || resource.data.workspaceId == request.auth.uid
+      );
+      allow create: if isUserApproved() && isValidId(proRecipeId) && isValidProRecipe(incoming()) && (
+        isAdmin() || isWorkspaceMember(incoming().get('workspaceId', ''))
+      );
+      allow update: if isUserApproved() && isValidId(proRecipeId) && isValidProRecipe(incoming()) && (
+        isAdmin() || (
+          isWorkspaceMember(existing().get('workspaceId', '')) &&
+          incoming().get('workspaceId', '') == existing().get('workspaceId', '')
+        )
+      );
+      allow delete: if isValidId(proRecipeId) && (
+        isAdmin() || (isUserApproved() && isWorkspaceMember(existing().get('workspaceId', '')))
+      );
     }
 
     match /pro_recipes/{proRecipeId} {
-      allow read: if true;
-
-      allow create, update: if request.resource.data.get('name', '').size() > 0;
-
-      allow delete: if isSignedIn() && isAdmin();
+      allow get: if isEmailVerified() && isValidId(proRecipeId) && (
+        isAdmin() || isWorkspaceMember(existing().get('workspaceId', ''))
+      );
+      allow list: if isEmailVerified() && (
+        isAdminToken() || resource.data.workspaceId == request.auth.uid
+      );
+      allow create: if isUserApproved() && isValidId(proRecipeId) && isValidProRecipe(incoming()) && (
+        isAdmin() || isWorkspaceMember(incoming().get('workspaceId', ''))
+      );
+      allow update: if isUserApproved() && isValidId(proRecipeId) && isValidProRecipe(incoming()) && (
+        isAdmin() || (
+          isWorkspaceMember(existing().get('workspaceId', '')) &&
+          incoming().get('workspaceId', '') == existing().get('workspaceId', '')
+        )
+      );
+      allow delete: if isValidId(proRecipeId) && (
+        isAdmin() || (isUserApproved() && isWorkspaceMember(existing().get('workspaceId', '')))
+      );
     }
 
     // ------------------------------------------------------------------------
-    // COLECCIÓN: /products/{productId}
-    // Inventario Maestro de Almacén y Productos
+    // /products/{productId}
     // ------------------------------------------------------------------------
     match /products/{productId} {
-      allow read: if true;
-
-      allow create, update: if request.resource.data.get('name', '').size() > 0;
-
-      allow delete: if isSignedIn() && isAdmin();
+      allow get: if isUserApproved() && isValidId(productId);
+      allow list: if isEmailVerified() && (
+        isAdminToken() ||
+        resource.data.status == 'approved' ||
+        resource.data.requestedBy == request.auth.uid
+      );
+      allow create: if isUserApproved() && isValidId(productId) && isValidProduct(incoming()) && (
+        isAdmin() || (
+          incoming().get('status', 'pending') == 'pending' &&
+          incoming().get('requestedBy', '') == request.auth.uid
+        )
+      );
+      allow update: if isUserApproved() && isValidId(productId) && isValidProduct(incoming()) && (
+        isAdmin() || (
+          existing().get('requestedBy', '') == request.auth.uid &&
+          incoming().get('status', 'pending') == existing().get('status', 'pending')
+        )
+      );
+      allow delete: if isValidId(productId) && isAdmin();
     }
 
     // ------------------------------------------------------------------------
-    // COLECCIONES: /menuPlans/{menuPlanId} y /menu_plans/{menuPlanId}
-    // Planificador de menús y órdenes de trabajo
+    // /menuPlans/{menuPlanId} & /menu_plans/{menuPlanId}
     // ------------------------------------------------------------------------
     match /menuPlans/{menuPlanId} {
-      allow read: if true;
-
-      allow create, update: if request.resource.data.get('title', '').size() > 0;
-
-      allow delete: if isSignedIn() && isAdmin();
+      allow get: if isEmailVerified() && isValidId(menuPlanId) && (
+        isAdmin() || isWorkspaceMember(existing().get('workspaceId', ''))
+      );
+      allow list: if isEmailVerified() && (
+        isAdminToken() || resource.data.workspaceId == request.auth.uid
+      );
+      allow create: if isUserApproved() && isValidId(menuPlanId) && isValidMenuPlan(incoming()) && (
+        isAdmin() || isWorkspaceMember(incoming().workspaceId)
+      );
+      allow update: if isUserApproved() && isValidId(menuPlanId) && isValidMenuPlan(incoming()) && (
+        isAdmin() || (
+          isWorkspaceMember(existing().get('workspaceId', '')) &&
+          incoming().workspaceId == existing().workspaceId
+        )
+      );
+      allow delete: if isValidId(menuPlanId) && (
+        isAdmin() || (isUserApproved() && isWorkspaceMember(existing().get('workspaceId', '')))
+      );
     }
 
     match /menu_plans/{menuPlanId} {
-      allow read: if true;
-
-      allow create, update: if request.resource.data.get('title', '').size() > 0;
-
-      allow delete: if isSignedIn() && isAdmin();
+      allow get: if isEmailVerified() && isValidId(menuPlanId) && (
+        isAdmin() || isWorkspaceMember(existing().get('workspaceId', ''))
+      );
+      allow list: if isEmailVerified() && (
+        isAdminToken() || resource.data.workspaceId == request.auth.uid
+      );
+      allow create: if isUserApproved() && isValidId(menuPlanId) && isValidMenuPlan(incoming()) && (
+        isAdmin() || isWorkspaceMember(incoming().workspaceId)
+      );
+      allow update: if isUserApproved() && isValidId(menuPlanId) && isValidMenuPlan(incoming()) && (
+        isAdmin() || (
+          isWorkspaceMember(existing().get('workspaceId', '')) &&
+          incoming().workspaceId == existing().workspaceId
+        )
+      );
+      allow delete: if isValidId(menuPlanId) && (
+        isAdmin() || (isUserApproved() && isWorkspaceMember(existing().get('workspaceId', '')))
+      );
     }
 
     // ------------------------------------------------------------------------
-    // COLECCIÓN: /settings/{docId}
-    // Configuración global y del workspace
+    // /settings/{docId} & /workspace_settings/{workspaceId}
     // ------------------------------------------------------------------------
     match /settings/{docId} {
-      allow read: if isSignedIn();
-
-      allow write: if isSignedIn() && (
-        isAdmin() || docId == request.auth.uid
+      allow get: if isEmailVerified() && isValidId(docId) && (
+        docId == 'global' || docId == request.auth.uid || isAdmin() || isWorkspaceMember(docId)
       );
+      allow list: if isAdminToken();
+      allow create, update: if isEmailVerified() && isValidId(docId) && isValidSettings(incoming()) && (
+        isAdmin() || (isUserApproved() && (docId == request.auth.uid || isWorkspaceMember(docId)))
+      );
+      allow delete: if isValidId(docId) && isAdmin();
     }
 
     match /workspace_settings/{workspaceId} {
-      allow read: if isSignedIn();
-
-      allow write: if isSignedIn() && (
-        isWorkspaceMember(workspaceId) || isAdmin()
+      allow get: if isEmailVerified() && isValidId(workspaceId) && (
+        isAdmin() || isWorkspaceMember(workspaceId)
       );
+      allow list: if isAdminToken();
+      allow create, update: if isEmailVerified() && isValidId(workspaceId) && isValidWorkspaceSettings(incoming()) && (
+        isAdmin() || (isUserApproved() && isWorkspaceMember(workspaceId))
+      );
+      allow delete: if isValidId(workspaceId) && isAdmin();
     }
 
     // ------------------------------------------------------------------------
-    // COLECCIÓN: /workspace_invites/{inviteId}
-    // Invitaciones de equipo
+    // /workspace_invites/{inviteId}
     // ------------------------------------------------------------------------
     match /workspace_invites/{inviteId} {
-      allow read: if isSignedIn();
-
-      allow create, update: if isSignedIn() && (
-        isUserApproved() || isAdmin()
+      allow get: if isEmailVerified() && isValidId(inviteId) && (
+        isAdmin() ||
+        existing().get('workspaceId', '') == request.auth.uid ||
+        existing().get('email', '') == request.auth.token.email
       );
-
-      allow delete: if isSignedIn() && (
-        isAdmin() || resource.data.get('workspace_id', '') == request.auth.uid
+      allow list: if isEmailVerified() && (
+        isAdminToken() ||
+        resource.data.workspaceId == request.auth.uid ||
+        resource.data.email == request.auth.token.email
+      );
+      allow create, update: if isUserApproved() && isValidId(inviteId) && isValidWorkspaceInvite(incoming()) && (
+        isAdmin() || incoming().workspaceId == request.auth.uid
+      );
+      allow delete: if isEmailVerified() && isValidId(inviteId) && (
+        isAdmin() || existing().get('workspaceId', '') == request.auth.uid
       );
     }
 
     // ------------------------------------------------------------------------
-    // COLECCIÓN DE PRUEBAS
+    // /test/{docId} - Connectivity Check Probe
     // ------------------------------------------------------------------------
     match /test/{docId} {
-      allow read, write: if isSignedIn();
+      allow get: if isEmailVerified() && docId == 'connection';
+      allow list, write: if false;
     }
   }
 }

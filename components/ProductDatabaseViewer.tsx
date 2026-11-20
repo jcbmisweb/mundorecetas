@@ -9,6 +9,7 @@ import {
   Square, Layers, Tag, Sparkles, ChevronDown 
 } from 'lucide-react';
 import { findSimilarProducts, normalizeText, extractDifferenceNote } from '../lib/productUtils';
+import { escapeCsvCell, validateUploadedFile } from '../lib/urlUtils';
 
 interface ProductDatabaseViewerProps {
   products: Product[];
@@ -189,9 +190,14 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
       const allergenCodes = (p.allergens || []).map(a => REVERSE_ALLERGEN_MAP[a] || a).join('|');
       const price = !p.pricePerUnit || p.pricePerUnit === 0 ? 'precio_no_disponible' : String(p.pricePerUnit);
       const weight = p.weightPerUnit || '';
-      const name = p.name.includes(',') ? `"${p.name}"` : p.name;
-      const family = (p.category || 'Varios').includes(',') ? `"${p.category}"` : p.category || 'Varios';
-      return `${family},${name},${price},${p.unit},${weight},${allergenCodes}`;
+      return [
+        escapeCsvCell(p.category || 'Varios'),
+        escapeCsvCell(p.name),
+        escapeCsvCell(price),
+        escapeCsvCell(p.unit),
+        escapeCsvCell(weight),
+        escapeCsvCell(allergenCodes),
+      ].join(',');
     });
     const csvContent = [headers, ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -200,11 +206,21 @@ export const ProductDatabaseViewer: React.FC<ProductDatabaseViewerProps> = ({
     link.setAttribute('href', url);
     link.setAttribute('download', `inventario_ies_la_flota_${new Date().toISOString().slice(0, 10)}.csv`);
     link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const check = validateUploadedFile(file, {
+      allowedExtensions: ['csv'],
+      maxSizeBytes: 15 * 1024 * 1024,
+    });
+    if (!check.valid) {
+      alert(check.error || 'Archivo CSV no válido.');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
       try {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { VideoLink } from '../types';
 import { getVideoPlatformInfo, sanitizeVideoUrl } from '../lib/videoUtils';
+import { sanitizeExternalUrl } from '../lib/urlUtils';
 import { Plus, Trash2, ExternalLink, Video, Play, Sparkles, AlertCircle } from 'lucide-react';
 
 interface VideoManagerInputProps {
@@ -195,15 +196,17 @@ export const VideoManagerInput: React.FC<VideoManagerInputProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                  <a
-                    href={vid.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-                    title="Probar enlace"
-                  >
-                    <ExternalLink size={14} />
-                  </a>
+                  {sanitizeExternalUrl(vid.url) && (
+                    <a
+                      href={sanitizeExternalUrl(vid.url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+                      title="Probar enlace"
+                    >
+                      <ExternalLink size={14} />
+                    </a>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleRemove(idx)}

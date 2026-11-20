@@ -7,9 +7,7 @@ import {
   getSupabaseCredentials, 
   saveSupabaseCredentials, 
   testSupabaseConnection, 
-  isSupabaseConfigured,
-  DEFAULT_SUPABASE_URL,
-  DEFAULT_SUPABASE_KEY
+  isSupabaseConfigured
 } from '../supabase';
 
 interface SupabaseConfigModalProps {
@@ -33,8 +31,8 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       const creds = getSupabaseCredentials();
-      setUrl(creds.url || DEFAULT_SUPABASE_URL);
-      setAnonKey(creds.anonKey || DEFAULT_SUPABASE_KEY);
+      setUrl(creds.url || '');
+      setAnonKey(creds.anonKey || '');
       setSavedSuccess(false);
       setTestResult(null);
       if (isSupabaseConfigured()) {
@@ -216,13 +214,18 @@ drop policy if exists "Allow all on menu_plans" on public.menu_plans;
 drop policy if exists "Allow all on settings" on public.settings;
 drop policy if exists "Allow all on workspace_invites" on public.workspace_invites;
 
-create policy "Allow all on users" on public.users for all using (true) with check (true);
-create policy "Allow all on recipes" on public.recipes for all using (true) with check (true);
-create policy "Allow all on pro_recipes" on public.pro_recipes for all using (true) with check (true);
-create policy "Allow all on products" on public.products for all using (true) with check (true);
-create policy "Allow all on menu_plans" on public.menu_plans for all using (true) with check (true);
-create policy "Allow all on settings" on public.settings for all using (true) with check (true);
-create policy "Allow all on workspace_invites" on public.workspace_invites for all using (true) with check (true);
+create policy "Users own or admin read" on public.users for select using (auth.uid()::text = id or exists (select 1 from public.users u where u.id = auth.uid()::text and u.role = 'admin'));
+create policy "Users self insert non-admin" on public.users for insert with check (auth.uid()::text = id and role = 'user' and is_approved = false);
+create policy "Users self update safe" on public.users for update using (auth.uid()::text = id) with check (auth.uid()::text = id);
+create policy "Recipes authenticated access" on public.recipes for select using (auth.role() = 'authenticated' and (is_public = true or workspace_id = auth.uid()::text));
+create policy "Recipes authenticated write" on public.recipes for insert with check (auth.role() = 'authenticated' and workspace_id = auth.uid()::text);
+create policy "Recipes owner update" on public.recipes for update using (auth.role() = 'authenticated' and workspace_id = auth.uid()::text);
+create policy "ProRecipes workspace read" on public.pro_recipes for select using (auth.role() = 'authenticated' and workspace_id = auth.uid()::text);
+create policy "ProRecipes workspace write" on public.pro_recipes for all using (auth.role() = 'authenticated' and workspace_id = auth.uid()::text) with check (auth.role() = 'authenticated' and workspace_id = auth.uid()::text);
+create policy "Products authenticated read" on public.products for select using (auth.role() = 'authenticated');
+create policy "MenuPlans workspace access" on public.menu_plans for all using (auth.role() = 'authenticated' and workspace_id = auth.uid()::text) with check (auth.role() = 'authenticated' and workspace_id = auth.uid()::text);
+create policy "Settings authenticated read" on public.settings for select using (auth.role() = 'authenticated');
+create policy "Invites workspace access" on public.workspace_invites for select using (auth.role() = 'authenticated' and (workspace_id = auth.uid()::text or lower(email) = lower(auth.jwt()->>'email')));
 
 do $$
 begin

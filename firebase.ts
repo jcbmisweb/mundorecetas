@@ -115,40 +115,10 @@ export async function testFirestoreConnection(): Promise<{ ok: boolean; latency:
   }
 }
 
-// Demo & Local User Storage helpers
-export function loginDemoUser(email = 'jcbmisweb@gmail.com', name = 'Juan Codina'): any {
-  const demoUser = {
-    uid: 'admin_jcbmisweb',
-    email,
-    displayName: name,
-    teacherName: name,
-    teacherLogo: 'https://lh3.googleusercontent.com/d/1DkCOqFGdw3PZbyNUnTQNgeaAGjBfv1_e',
-    instituteName: 'IES La Flota',
-    instituteLogo: '',
-    isApproved: true,
-    role: 'admin',
-    createdAt: Date.now(),
-    workspaceId: 'admin_jcbmisweb'
-  };
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('active_app_user', JSON.stringify(demoUser));
-  }
-  return demoUser;
-}
-
-export function getDemoUser(): any | null {
-  if (typeof localStorage !== 'undefined') {
-    const raw = localStorage.getItem('active_app_user');
-    if (raw) {
-      try { return JSON.parse(raw); } catch {}
-    }
-  }
-  return null;
-}
-
+// Local profile cache helpers (strictly synchronized with verified Firebase Auth UID)
 export function saveActiveUser(user: any | null) {
   if (typeof localStorage !== 'undefined') {
-    if (user) {
+    if (user && user.uid) {
       localStorage.setItem('active_app_user', JSON.stringify(user));
     } else {
       localStorage.removeItem('active_app_user');
@@ -160,31 +130,15 @@ export function getActiveUser(): any | null {
   if (typeof localStorage !== 'undefined') {
     const raw = localStorage.getItem('active_app_user');
     if (raw) {
-      try { return JSON.parse(raw); } catch {}
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.uid === 'string') {
+          return parsed;
+        }
+      } catch {}
     }
   }
   return null;
 }
 
-export async function loginWithCustomEmail(email: string, displayName?: string): Promise<any> {
-  const cleanEmail = email.trim().toLowerCase();
-  const uid = `user_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
-  const isAdmin = cleanEmail === 'jcbmisweb@gmail.com';
-  const name = displayName?.trim() || cleanEmail.split('@')[0];
-  const user = {
-    uid,
-    email: cleanEmail,
-    displayName: name,
-    teacherName: name,
-    teacherLogo: isAdmin ? 'https://lh3.googleusercontent.com/d/1DkCOqFGdw3PZbyNUnTQNgeaAGjBfv1_e' : '',
-    instituteName: 'IES La Flota',
-    instituteLogo: '',
-    isApproved: true,
-    role: isAdmin ? 'admin' : 'collaborator',
-    createdAt: Date.now(),
-    workspaceId: uid
-  };
-  saveActiveUser(user);
-  return user;
-}
 
